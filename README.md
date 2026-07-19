@@ -45,8 +45,24 @@ auto-start, network access, and administrator account creation.
 
 Allow about ten minutes, most of it downloading (roughly 1 GB).
 
-At the end, the access URL and the **administrator password** are displayed.
-Write the password down — it is never shown again.
+At the end, the access URL, the **administrator password** and the **two-factor
+enrolment key** are displayed. Write all three down — they are never shown again.
+
+> ⚠️ **Two-factor authentication is mandatory on the administrator account.** Have
+> an authenticator app ready (Google Authenticator, Aegis, Bitwarden, 1Password…)
+> before you start: the password alone will not get you in.
+>
+> If you lose the key, retrieve it with:
+> ```bash
+> cd /opt/signflow && docker compose exec -T -e SHOW_TOTP_EMAIL=<your-admin-email> \
+>   backend python3 /app/scripts/show_totp.py
+> ```
+
+> ⚠️ **The administrator address must use a real domain.** Reserved suffixes
+> (`.local`, `.test`, `.invalid`, `.lan`…) are rejected by the API: the account
+> would be created and then be impossible to log into, with the interface
+> reporting invalid credentials while the address is the actual problem. The
+> installer refuses them outright.
 
 ### Unattended install
 

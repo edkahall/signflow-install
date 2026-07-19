@@ -205,6 +205,29 @@ if [[ -z "${SIGNFLOW_REGISTRY_USER:-}" ]]; then
     echo ""
 fi
 
+# Asked here so every prompt happens up front, rather than stopping the install
+# ten minutes later.
+if [[ -z "${ADMIN_EMAIL:-}" ]]; then
+    echo ""
+    info "Email address for the administrator account"
+    read -rp "    Email [admin@signflow.io]: " ADMIN_EMAIL
+    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@signflow.io}"
+fi
+
+# ⚠️ Reserved top-level domains (.local, .test, .invalid…) are REJECTED by the
+# API's email validator. The account would be created successfully and then be
+# impossible to log into: the login endpoint answers 422, and the interface
+# reports "invalid credentials" — pointing at the password while the address is
+# at fault. Caught on a bare-metal install; the previous default was
+# admin@signflow.local, which locked every installation out of itself.
+case "${ADMIN_EMAIL,,}" in
+    *.local|*.localhost|*.test|*.invalid|*.example|*.internal|*.home|*.lan|*.localdomain)
+        fail "'${ADMIN_EMAIL}' uses a reserved top-level domain, which the API rejects — the account could never log in. Use a real domain name."
+        ;;
+    *@*.*) : ;;
+    *) fail "'${ADMIN_EMAIL}' is not a valid email address." ;;
+esac
+
 echo "${SIGNFLOW_REGISTRY_PASSWORD}" \
     | docker login "$REGISTRY" -u "$SIGNFLOW_REGISTRY_USER" --password-stdin >/dev/null 2>&1 \
     || fail "Registry authentication refused — check your credentials"
@@ -387,13 +410,50 @@ EXISTING=$(docker compose exec -T postgres psql -U signflow -d signflow -tAc \
     "SELECT count(*) FROM cms_users;" 2>/dev/null | tr -d '[:space:]' || echo "")
 
 ADMIN_PASSWORD=""
+TOTP_SECRET=""
+TOTP_URI=""
 if [[ "$EXISTING" == "0" ]]; then
     ADMIN_PASSWORD="$(openssl rand -base64 18 | tr -d '/+=' | cut -c1-20)aA1!"
     if docker compose exec -T \
-        -e BOOTSTRAP_ADMIN_EMAIL="${ADMIN_EMAIL:-admin@signflow.local}" \
+        -e BOOTSTRAP_ADMIN_EMAIL="${ADMIN_EMAIL}" \
         -e BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
         backend python3 /app/scripts/bootstrap.py >/dev/null; then
         ok "Organisation and administrator account created"
+
+        # An organisation-admin account has two-factor authentication ENFORCED.
+        # Without the enrolment details below, the operator holds a password that
+        # cannot be used and the installation ends locked out of itself.
+        # reveal_totp_secret() is used rather than the raw column so this keeps
+        # working if secrets are encrypted at rest.
+        TOTP_OUT=$(docker compose exec -T -e SF_EMAIL="$ADMIN_EMAIL" backend python3 - <<'PYEOF' 2>/dev/null || true
+import asyncio, os
+import pyotp
+from sqlalchemy import select
+from app.db.session import WorkerSessionLocal
+from app.models.user import CmsUser
+from app.models.organization import CmsOrganization
+from app.services.totp import reveal_totp_secret
+
+async def main() -> None:
+    email = os.environ["SF_EMAIL"]
+    async with WorkerSessionLocal() as db:
+        user = (await db.execute(select(CmsUser).where(CmsUser.email == email))).scalar_one_or_none()
+        if user is None or not user.totp_secret:
+            return
+        org = (await db.execute(
+            select(CmsOrganization.org_name).where(CmsOrganization.id_org == user.id_org)
+        )).scalar_one_or_none() or "SignFlow"
+        secret = reveal_totp_secret(user.totp_secret)
+        print(secret)
+        print(pyotp.TOTP(secret).provisioning_uri(name=email, issuer_name=org))
+
+asyncio.run(main())
+PYEOF
+)
+        TOTP_SECRET=$(echo "$TOTP_OUT" | sed -n '1p' | tr -d '\r')
+        TOTP_URI=$(echo "$TOTP_OUT" | sed -n '2p' | tr -d '\r')
+        [[ -n "$TOTP_SECRET" ]] && ok "Two-factor enrolment retrieved" \
+            || warn "Could not read the 2FA enrolment — see the note at the end"
     else
         ADMIN_PASSWORD=""
         warn "Bootstrap failed — run it again with:"
@@ -415,8 +475,20 @@ echo -e "   Web interface   : ${CYAN}http://${SERVER_IP}:${NGINX_PORT}${NC}"
 if [[ -n "$ADMIN_PASSWORD" ]]; then
 echo ""
 echo -e "   ${YELLOW}Administrator credentials — WRITE THESE DOWN, they are shown only once:${NC}"
-echo -e "     Email    : ${ADMIN_EMAIL:-admin@signflow.local}"
+echo -e "     Email    : ${ADMIN_EMAIL}"
 echo -e "     Password : ${ADMIN_PASSWORD}"
+echo ""
+if [[ -n "$TOTP_SECRET" ]]; then
+echo -e "   ${YELLOW}Two-factor authentication is REQUIRED for this account.${NC}"
+echo -e "   Add it to your authenticator app NOW — you cannot log in without it:"
+echo -e "     Key : ${CYAN}${TOTP_SECRET}${NC}"
+echo -e "     URI : ${TOTP_URI}"
+else
+echo -e "   ${YELLOW}Two-factor authentication is REQUIRED for this account.${NC}"
+echo -e "   Retrieve the enrolment key with:"
+echo -e "     cd ${INSTALL_DIR} && docker compose exec -T -e SHOW_TOTP_EMAIL=${ADMIN_EMAIL} \\"
+echo -e "       backend python3 /app/scripts/show_totp.py"
+fi
 fi
 echo ""
 echo -e "   Player configuration:"
