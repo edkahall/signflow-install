@@ -1,0 +1,5 @@
+# Ce depot ne doit JAMAIS contenir de configuration reelle.
+# .env porte les cles de chiffrement et les mots de passe generes a l'installation.
+.env
+.env.local
+*.bak
