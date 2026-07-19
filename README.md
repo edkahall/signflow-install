@@ -114,12 +114,121 @@ Images need no backup: they can always be pulled again.
 
 ---
 
-## Transport encryption
+## Serving over HTTPS
 
 The default installation runs over **plain HTTP**, which is acceptable on a trusted
 local network. As soon as the server is reachable from the internet, put a TLS
-reverse proxy in front (Caddy, or nginx with Let's Encrypt) and switch
-`PUBLIC_WEB_URL` to `https://`.
+reverse proxy in front.
+
+> ⚠️ **Media storage must move to HTTPS at the same time.** Once the interface is
+> served over TLS, a page loaded over HTTPS cannot fetch media over plain HTTP —
+> browsers block it as *mixed content*. Every image and video simply disappears,
+> with no visible error other than a console warning. Proxying only the web
+> interface is therefore not enough: MinIO needs its own TLS host.
+
+### 1. Point a DNS name at the server
+
+Create an `A` record for, say, `signage.example.com`. Ports **80** and **443** must
+reach the machine — port 80 is required for certificate issuance and renewal.
+
+### 2. Create `/opt/signflow/tls/Caddyfile`
+
+Replace `signage.example.com` with your own name.
+
+```caddyfile
+{
+    email admin@example.com
+}
+
+signage.example.com {
+    encode zstd gzip
+    header {
+        Strict-Transport-Security "max-age=31536000"
+        X-Content-Type-Options "nosniff"
+        -Server
+    }
+    reverse_proxy 127.0.0.1:8080 {
+        header_up X-Forwarded-Proto https
+    }
+}
+
+# Media, downloaded directly by browsers and players through signed URLs.
+signage.example.com:9443 {
+    header {
+        X-Content-Type-Options "nosniff"
+        -Server
+    }
+    reverse_proxy 127.0.0.1:9000
+}
+```
+
+### 3. Create `/opt/signflow/tls/docker-compose.yml`
+
+```yaml
+services:
+  caddy:
+    image: caddy:2
+    container_name: signflow_caddy
+    restart: unless-stopped
+    network_mode: host
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+
+volumes:
+  caddy_data:
+  caddy_config:
+```
+
+`network_mode: host` lets Caddy reach nginx and MinIO on the loopback interface.
+The `caddy_data` volume holds the certificates — keep it, or every restart would
+request new ones and hit Let's Encrypt rate limits.
+
+### 4. Update `/opt/signflow/.env`
+
+```bash
+PUBLIC_WEB_URL=https://signage.example.com
+MINIO_PUBLIC_ENDPOINT=signage.example.com:9443
+MINIO_PUBLIC_USE_SSL=true
+CORS_ORIGINS=["https://signage.example.com"]
+```
+
+### 5. Start everything
+
+```bash
+cd /opt/signflow/tls && docker compose up -d
+cd /opt/signflow && docker compose up -d
+```
+
+Certificates are issued within a minute. Check with
+`docker logs signflow_caddy | grep -i certificate`.
+
+### 6. Verify — do not skip this
+
+Log in over HTTPS **and open a media item**. A padlock on the login page proves
+nothing about the media path, which is exactly where this setup breaks.
+
+### If port 443 is already taken
+
+Caddy defaults to the TLS-ALPN challenge on port 443, which cannot work when that
+port belongs to another service. Force HTTP-01 instead by adding to each site block:
+
+```caddyfile
+    tls {
+        issuer acme {
+            disable_tlsalpn_challenge
+        }
+    }
+```
+
+Port 80 then becomes the only validation path — it must stay reachable, including
+for renewals every 60 days.
+
+### Player configuration
+
+Once TLS is in place, players must use the HTTPS address:
+`BACKEND_URL = https://signage.example.com`
 
 ---
 

@@ -87,6 +87,18 @@ fi
 docker info >/dev/null 2>&1 || fail "The Docker daemon is not running"
 ok "Docker $(docker --version | awk '{print $3}' | tr -d ','), Compose $(docker compose version | awk '{print $4}')"
 
+# Without this, every `docker compose` command in the documentation fails with
+# "permission denied while trying to connect to the Docker API" for the operator,
+# who would have to prefix everything with sudo.
+# ⚠️ Membership of the `docker` group grants root-equivalent access to the host.
+# That is the accepted trade-off on a machine dedicated to this application, where
+# the operator already has sudo.
+if [[ "$SERVICE_USER" != "root" ]] && ! id -nG "$SERVICE_USER" | tr ' ' '\n' | grep -qx docker; then
+    usermod -aG docker "$SERVICE_USER"
+    ok "$SERVICE_USER added to the 'docker' group (effective at next login)"
+    DOCKER_GROUP_ADDED=1
+fi
+
 SERVER_IP=$(ip route get 1.1.1.1 2>/dev/null | awk '{for(i=1;i<=NF;i++) if ($i=="src") print $(i+1)}' | head -1)
 SERVER_IP="${SERVER_IP:-127.0.0.1}"
 info "Detected server address: $SERVER_IP"
@@ -414,5 +426,10 @@ echo -e "   Logs            : cd ${INSTALL_DIR} && docker compose logs -f backen
 echo -e "   Stop / start    : systemctl stop signflow / systemctl start signflow"
 echo -e "   Update          : cd ${INSTALL_DIR} && docker compose pull && docker compose up -d"
 echo ""
+if [[ -n "${DOCKER_GROUP_ADDED:-}" ]]; then
+echo -e "   ${YELLOW}Log out and back in${NC} before running docker commands as ${SERVICE_USER},"
+echo -e "   or they will fail with \"permission denied\" until the new group applies."
+echo ""
+fi
 echo -e "   ${YELLOW}Back up ${INSTALL_DIR}/.env${NC} — it holds this installation's encryption keys."
 echo ""
