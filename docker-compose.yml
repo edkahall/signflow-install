@@ -1,26 +1,24 @@
 # ═══════════════════════════════════════════════════════════════════════════════
-# SignFlow CMS — composition CLIENT (images pré-construites)
+# SignFlow CMS — CUSTOMER deployment (pre-built images)
 # ═══════════════════════════════════════════════════════════════════════════════
-#
-# Destiné au DÉPÔT PUBLIC. Ne contient aucun code source : tout vient du registre.
 #
 #   docker login ${SIGNFLOW_REGISTRY}
 #   docker compose pull && docker compose up -d
 #   docker compose exec backend alembic upgrade head
-#   docker compose exec backend python scripts/bootstrap.py   # 1re install uniquement
+#   docker compose exec backend python scripts/bootstrap.py   # first install only
 #
-# DIFFÉRENCES ASSUMÉES avec la composition de développement :
-#   - `image:` au lieu de `build:` — aucune compilation chez le client
-#   - AUCUN montage du code source (le code vit dans l'image, il n'est plus
-#     rechargeable à chaud : une mise à jour = `pull` + `up -d`, pas un `git pull`)
-#   - plus de `--reload` (mode développement, coûteux et instable en production)
-#   - mailpit retiré (SMTP de test) — renseignez un vrai serveur SMTP dans .env
-#   - ports d'API et d'UI liés à 127.0.0.1 : c'est nginx/Caddy qui expose au réseau
+# DELIBERATE DIFFERENCES from the development stack:
+#   - `image:` instead of `build:` — nothing is compiled on the customer machine
+#   - NO source code mounted (the code lives inside the image and is no longer
+#     hot-reloadable: an upgrade is `pull` + `up -d`, never a `git pull`)
+#   - no `--reload` (development mode, costly and unstable in production)
+#   - mailpit removed (test SMTP) — configure a real SMTP server in .env
+#   - API and UI ports bound to 127.0.0.1: nginx/Caddy exposes them to the network
 #
-# ⚠️ MinIO est le SEUL service publié sur toutes les interfaces : les navigateurs et
-# les players téléchargent les médias par URL signée, ils doivent donc l'atteindre
-# directement. MINIO_PUBLIC_ENDPOINT doit porter une adresse JOIGNABLE PAR EUX
-# (jamais « localhost », sinon chaque poste s'interroge lui-même).
+# ⚠️ MinIO is the ONLY service published on all interfaces: browsers and players
+# download media through signed URLs and must reach it directly. So
+# MINIO_PUBLIC_ENDPOINT must carry an address THEY can reach — never "localhost",
+# or every machine would end up querying itself.
 
 x-logging: &default-logging
   driver: json-file
@@ -28,75 +26,76 @@ x-logging: &default-logging
     max-size: "20m"
     max-file: "5"
 
-# Bloc d'environnement commun aux 5 services applicatifs (backend + 4 workers).
-# Une seule source de vérité : une variable oubliée sur un worker est un bug
-# silencieux — l'incident SMTP du 2026-07-12 (envois worker en échec) venait
-# exactement de là.
+# Environment shared by the five application services (backend + 4 workers).
+# A single source of truth: a variable forgotten on one worker is a silent bug —
+# outgoing mail once failed on the worker side for exactly that reason, because
+# SMTP_* had only been declared on the backend.
 x-app-env: &app-env
-  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-signflow}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}@postgres:5432/${POSTGRES_DB:-signflow}
+  DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-signflow}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing}@postgres:5432/${POSTGRES_DB:-signflow}
   DATABASE_WORKER_URL: postgresql+asyncpg://signflow_worker:${POSTGRES_WORKER_PASSWORD:-signflow_worker_secret}@postgres:5432/${POSTGRES_DB:-signflow}
   REDIS_URL: redis://redis:6379/0
   MINIO_ENDPOINT: minio:9000
-  MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT manquant}
+  MINIO_PUBLIC_ENDPOINT: ${MINIO_PUBLIC_ENDPOINT:?MINIO_PUBLIC_ENDPOINT is missing}
   MINIO_PUBLIC_USE_SSL: ${MINIO_PUBLIC_USE_SSL:-false}
-  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY manquant}
-  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY manquant}
+  MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is missing}
+  MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is missing}
   MINIO_USE_SSL: "false"
-  CMS_JWT_SECRET: ${CMS_JWT_SECRET:?CMS_JWT_SECRET manquant}
-  # Coffre BYOK (§XXVII) — clé Fernet : `openssl rand -base64 32` (un rand -hex est REFUSÉ)
-  CMS_VAULT_KEY: ${CMS_VAULT_KEY:?CMS_VAULT_KEY manquant}
+  CMS_JWT_SECRET: ${CMS_JWT_SECRET:?CMS_JWT_SECRET is missing}
+  # Vault for per-organisation AI keys — Fernet key: `openssl rand -base64 32`
+  # (a `rand -hex` value is REJECTED).
+  CMS_VAULT_KEY: ${CMS_VAULT_KEY:?CMS_VAULT_KEY is missing}
   SIGNFLOW_TZ: ${SIGNFLOW_TZ:-Europe/Paris}
   PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
   CORS_ORIGINS: ${CORS_ORIGINS:-'[]'}
-  # Tokens machine players (« Option B ») : rotation à la reconnexion, jamais de coupure
+  # Player machine tokens: rotated on reconnect, so screens never go dark
   CMS_PLAYER_TOKEN_EXPIRE_DAYS: ${CMS_PLAYER_TOKEN_EXPIRE_DAYS:-60}
   CMS_PLAYER_TOKEN_REFRESH_DAYS: ${CMS_PLAYER_TOKEN_REFRESH_DAYS:-20}
   CMS_PLAYER_TOKEN_GRACE_DAYS: ${CMS_PLAYER_TOKEN_GRACE_DAYS:-14}
   EVENT_BUS_BACKEND: ${EVENT_BUS_BACKEND:-redis_streams}
-  # Intégration ERP Kahall — OPTIONNELLE : vide = SignFlow fonctionne seul
+  # Kahall ERP integration — OPTIONAL: empty means SignFlow runs standalone
   ERP_API_URL: ${ERP_API_URL:-}
   ERP_SSO_ENABLED: ${ERP_SSO_ENABLED:-false}
-  # IA : proxy LiteLLM interne (embeddings RAG locaux via Ollama)
+  # AI: internal LiteLLM proxy (RAG embeddings computed locally by Ollama)
   CMS_LITELLM_URL: ${CMS_LITELLM_URL:-http://litellm:4000}
   CMS_LITELLM_API_KEY: ${CMS_LITELLM_API_KEY:-}
   CMS_EMBED_MODEL: ${CMS_EMBED_MODEL:-local/nomic-embed}
   CMS_ASSISTANT_MODEL: ${CMS_ASSISTANT_MODEL:-claude-sonnet-4-6}
   CMS_FEED_SUMMARY_MODEL: ${CMS_FEED_SUMMARY_MODEL:-claude-haiku-4-5}
   FEED_PROXY_URL: ${FEED_PROXY_URL:-http://feed-proxy:8001}
-  # Documentation d'API interactive — false en production (durcissement pentest)
+  # Interactive API documentation — false in production (security hardening)
   CMS_DOCS_ENABLED: ${CMS_DOCS_ENABLED:-false}
-  # SMTP — rapports planifiés (§24.3) et canal EMAIL des alertes (§XXII).
-  # Doit être déclaré sur le backend ET les workers : dispatch_sync tourne côté worker.
+  # SMTP — scheduled reports and the email alert channel. Must be declared on the
+  # backend AND the workers: alert dispatch runs on the worker side.
   SMTP_HOST: ${SMTP_HOST:-}
   SMTP_PORT: ${SMTP_PORT:-587}
   SMTP_USER: ${SMTP_USER:-}
   SMTP_PASSWORD: ${SMTP_PASSWORD:-}
   SMTP_FROM: ${SMTP_FROM:-noreply@example.com}
   SMTP_TLS: ${SMTP_TLS:-true}
-  # Proof of Play — archivage & rotation (§XXIV)
+  # Proof of play — archiving and rotation
   CMS_POP_HOT_RETENTION_DAYS: ${CMS_POP_HOT_RETENTION_DAYS:-90}
   CMS_POP_ARCHIVE_PREFIX: ${CMS_POP_ARCHIVE_PREFIX:-pop-archives}
-  # « Jeanine » — agent par messagerie. Vides = canal désactivé (webhook 503)
+  # "Jeanine" — messaging agent. Empty = channel disabled.
   CMS_TELEGRAM_BOT_TOKEN: ${CMS_TELEGRAM_BOT_TOKEN:-}
   CMS_TELEGRAM_WEBHOOK_SECRET: ${CMS_TELEGRAM_WEBHOOK_SECRET:-}
 
 services:
 
-  # ── Base de données ─────────────────────────────────────────────────────────
+  # ── Database ────────────────────────────────────────────────────────────────
   postgres:
     image: pgvector/pgvector:pg16
     restart: unless-stopped
     logging: *default-logging
     environment:
       POSTGRES_USER: ${POSTGRES_USER:-signflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD manquant}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing}
       POSTGRES_DB: ${POSTGRES_DB:-signflow}
       POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-signflow_app_secret}
       POSTGRES_WORKER_PASSWORD: ${POSTGRES_WORKER_PASSWORD:-signflow_worker_secret}
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Crée les extensions (pgvector) et les rôles signflow_app / signflow_worker.
-      # Ne s'exécute QUE sur un répertoire de données vierge (1re installation).
+      # Creates the extensions (pgvector) and the signflow_app / signflow_worker
+      # roles. Runs ONLY against an empty data directory (first installation).
       - ./postgres-init.sh:/docker-entrypoint-initdb.d/init.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-signflow}"]
@@ -118,20 +117,20 @@ services:
       timeout: 5s
       retries: 5
 
-  # ── Stockage objet ──────────────────────────────────────────────────────────
+  # ── Object storage ──────────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest
     restart: unless-stopped
     logging: *default-logging
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY manquant}
-      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY manquant}
+      MINIO_ROOT_USER: ${MINIO_ACCESS_KEY:?MINIO_ACCESS_KEY is missing}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:?MINIO_SECRET_KEY is missing}
     volumes:
       - minio_data:/data
     ports:
-      # Seul service ouvert au réseau : les navigateurs et players téléchargent
-      # les médias par URL signée et doivent l'atteindre directement.
+      # The only service open to the network: browsers and players download media
+      # through signed URLs and must reach it directly.
       - "${MINIO_BIND:-0.0.0.0}:9000:9000"
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
@@ -139,7 +138,7 @@ services:
       timeout: 20s
       retries: 3
 
-  # ── API FastAPI ─────────────────────────────────────────────────────────────
+  # ── FastAPI backend ─────────────────────────────────────────────────────────
   backend:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-backend:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
@@ -153,8 +152,9 @@ services:
       redis:
         condition: service_healthy
 
-  # ── Worker léger (events, notifications, analytics) ─────────────────────────
-  # Séparé du média : les tâches temps-réel ne sont jamais bloquées par un transcode.
+  # ── Light worker (events, notifications, analytics) ─────────────────────────
+  # Kept separate from media work so real-time tasks are never stuck behind a
+  # long video transcode.
   celery-worker:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-worker:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
@@ -169,8 +169,8 @@ services:
       --queues=default,notifications,analytics
       --concurrency=$$(python -c "from app.core.resources import light_concurrency; print(light_concurrency())")'
 
-  # ── Worker média (transcodage ffmpeg, conversion de documents) ──────────────
-  # Concurrence auto-adaptée au CPU et à la RAM réels (app/core/resources.py).
+  # ── Media worker (ffmpeg transcoding, document conversion) ──────────────────
+  # Concurrency adapts itself to the machine's real CPU and memory.
   celery-media:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-media:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
@@ -186,7 +186,7 @@ services:
       --queues=media
       --concurrency=$$(python -c "from app.core.resources import media_concurrency; print(media_concurrency())")'
 
-  # ── Worker captures (Playwright/Chromium — URL Display §XXV.2) ──────────────
+  # ── Screenshot worker (Playwright/Chromium — URL Display capture) ───────────
   celery-screenshot:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-screenshot:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
@@ -196,7 +196,9 @@ services:
       - backend
     command: celery -A app.workers.celery_app worker --loglevel=info --queues=cms_screenshot --concurrency=2
 
-  # ── Ordonnanceur ────────────────────────────────────────────────────────────
+  # ── Scheduler ───────────────────────────────────────────────────────────────
+  # Uses the slim backend image: it schedules tasks and needs neither ffmpeg nor
+  # LibreOffice.
   celery-beat:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-backend:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
@@ -206,11 +208,11 @@ services:
       - backend
     command: celery -A app.workers.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler
 
-  # ── Interface web ───────────────────────────────────────────────────────────
-  # Image `runner` standalone : le build est FAIT, rien n'est compilé au démarrage
-  # (~90 ms de lancement). ⚠️ NEXT_PUBLIC_API_URL est inliné AU BUILD de l'image,
-  # le définir ici n'aurait AUCUN effet : l'image publiée utilise une URL d'API
-  # RELATIVE, donc le navigateur appelle l'hôte qui lui a servi la page.
+  # ── Web interface ───────────────────────────────────────────────────────────
+  # Standalone `runner` image: the build is already done, nothing is compiled at
+  # startup (~90 ms to boot). ⚠️ NEXT_PUBLIC_API_URL is inlined AT BUILD TIME, so
+  # setting it here would have NO effect: the published image uses a RELATIVE API
+  # URL, meaning the browser calls whichever host served the page.
   frontend:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-frontend:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
@@ -220,7 +222,7 @@ services:
     depends_on:
       - backend
 
-  # ── Relais de flux (RSS, réseaux sociaux, météo — §XXV.3) ───────────────────
+  # ── Feed relay (RSS, social networks, weather) ──────────────────────────────
   feed-proxy:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-feed-proxy:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
@@ -231,10 +233,11 @@ services:
       - redis
     command: uvicorn app.main:app --host 0.0.0.0 --port 8001
 
-  # ── Embeddings locaux (RAG §XXVII) ──────────────────────────────────────────
-  # Sert uniquement nomic-embed-text (768 dims) : embeddings 100 % locaux, sans clé
-  # API ni GPU. Le modèle (~0,3 Go) est téléchargé au 1er démarrage puis conservé
-  # dans le volume. Retirez ce service et litellm si l'assistant IA n'est pas utilisé.
+  # ── Local embeddings (AI assistant) ─────────────────────────────────────────
+  # Serves nomic-embed-text (768 dimensions) only: embeddings stay entirely local,
+  # with no API key and no GPU. The model (~0.3 GB) is downloaded on first start
+  # and kept in the volume. Remove this service and litellm if you do not use the
+  # AI assistant.
   ollama:
     image: ollama/ollama:latest
     restart: unless-stopped
@@ -249,7 +252,7 @@ services:
       retries: 5
       start_period: 120s
 
-  # ── Proxy LLM ───────────────────────────────────────────────────────────────
+  # ── LLM proxy ───────────────────────────────────────────────────────────────
   litellm:
     image: ghcr.io/berriai/litellm:main-stable
     restart: unless-stopped
@@ -262,7 +265,7 @@ services:
     depends_on:
       - ollama
     healthcheck:
-      # L'image litellm n'embarque pas curl → sonde en python.
+      # The litellm image ships no curl, so probe with python instead.
       test: ["CMD-SHELL", "python3 -c \"import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)\" || exit 1"]
       interval: 30s
       timeout: 10s

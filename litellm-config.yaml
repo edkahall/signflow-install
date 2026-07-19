@@ -14,8 +14,8 @@ model_list:
       model: anthropic/claude-opus-4-7
       api_key: os.environ/ANTHROPIC_API_KEY
 
-  # Embeddings de l'assistant IA — 100 % locaux via Ollama (nomic-embed-text,
-  # 768 dimensions). Aucune clé API requise : aucun contenu ne sort de la machine.
+  # AI assistant embeddings — fully local through Ollama (nomic-embed-text,
+  # 768 dimensions). No API key required: no content ever leaves the machine.
   - model_name: local/nomic-embed
     litellm_params:
       model: ollama/nomic-embed-text

@@ -1,5 +1,5 @@
-# Ce depot ne doit JAMAIS contenir de configuration reelle.
-# .env porte les cles de chiffrement et les mots de passe generes a l'installation.
+# This repository must NEVER contain a real configuration.
+# .env holds the encryption keys and the passwords generated at install time.
 .env
 .env.local
 *.bak
