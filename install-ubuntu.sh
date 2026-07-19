@@ -243,10 +243,15 @@ check() {
     if [[ "$code" == "$3" ]]; then ok "$1 -> $code"
     else echo -e "${RED}    FAIL $1 -> $code (expected $3)${NC}"; FAIL=$((FAIL+1)); fi
 }
+# ⚠️ The trailing slash matters and is NOT uniform across endpoints: some routes
+# are declared with it, some without. Calling the wrong form returns 307 or 405
+# instead of 401, which looks like a failure while the API is perfectly healthy.
+# The forms below are the ones that actually answer 401 — verified on a live
+# installation, not assumed.
 check "GET /health"    "http://localhost:${BACKEND_PORT}/health" "200"
 check "GET /players"   "$API/players/"   "401"
-check "GET /media"     "$API/media"      "401"
-check "GET /playlists" "$API/playlists"  "401"
+check "GET /media"     "$API/media/"     "401"
+check "GET /playlists" "$API/playlists/" "401"
 check "GET /schedules" "$API/schedules"  "401"
 [[ $FAIL -eq 0 ]] && ok "Health checks 5/5" || warn "$FAIL check(s) failed"
 
