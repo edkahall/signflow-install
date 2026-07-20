@@ -130,6 +130,42 @@ Three things to back up:
 
 Images need no backup: they can always be pulled again.
 
+### Hardware video acceleration
+
+Transcoding is the heaviest thing this server does, and the installer sets up GPU
+encoding on its own when it can. It reports what it settled on at the end, and
+again during the health checks.
+
+| Hardware | What the installer does |
+|---|---|
+| **NVIDIA** (with a working driver) | Installs `nvidia-container-toolkit`, configures the Docker runtime, restarts Docker |
+| **Intel / AMD** | Passes the DRM render node (`/dev/dri`) into the transcoding worker |
+| **Neither** | Nothing — encoding runs on CPU (`libx264`). Everything works, just slower |
+
+> ⚠️ **No GPU driver is ever installed.** Installing a proprietary driver on a
+> server that is not ours can break the display stack and require a reboot to
+> recover. NVIDIA acceleration is enabled **only if `nvidia-smi` already answers** —
+> the card being present is not enough, the driver has to be loaded and healthy.
+
+The GPU wiring lives in `/opt/signflow/docker-compose.override.yml`. **Delete that
+file and restart to go back to CPU encoding** — useful if you suspect the GPU.
+
+SignFlow does not blindly trust the hardware: it *tests* each encoder (NVENC,
+QuickSync, VAAPI) before using it and falls back to CPU on its own. So a GPU that
+turns out to be unusable degrades quietly instead of breaking transcoding — which
+is also why the installer checks, and tells you, whether acceleration really came
+up rather than assuming it did.
+
+To check at any time:
+
+```bash
+cd /opt/signflow
+docker compose exec celery-media python3 -c \
+  "from app.core import encoders; print(encoders.detect_hw_encoders())"
+```
+
+An empty result means CPU encoding.
+
 ### Where the media are stored
 
 The installer asks for this and writes it to `MEDIA_DATA_PATH`. It is worth

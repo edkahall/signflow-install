@@ -104,6 +104,77 @@ SERVER_IP="${SERVER_IP:-127.0.0.1}"
 info "Detected server address: $SERVER_IP"
 
 # =============================================================================
+step "1b/10 — Hardware video acceleration (optional)"
+# =============================================================================
+#
+# Transcoding is by far the heaviest task this server performs. SignFlow already
+# picks the best encoder on its own — it TESTS nvenc, qsv and vaapi in turn and
+# falls back to libx264 — so the only thing missing is access to the hardware
+# from inside the container. That is what this step arranges.
+#
+# ⚠️ THIS STEP NEVER INSTALLS A GPU DRIVER. Installing a proprietary driver on
+# someone else's server can break their display stack and require a reboot to
+# recover. We use the driver that is already there, or we do without.
+#
+# Detection order matters: a machine can expose /dev/dri (Intel iGPU) *and* hold
+# an NVIDIA card. NVIDIA is checked first because it is the faster encoder.
+
+GPU_MODE="none"
+
+# NVIDIA — the card being present is NOT enough: without a working driver the
+# container toolkit has nothing to talk to. `nvidia-smi` answering is the only
+# reliable proof that the driver is loaded and healthy.
+if command -v nvidia-smi >/dev/null 2>&1 && nvidia-smi -L >/dev/null 2>&1; then
+    GPU_MODE="nvidia"
+    info "NVIDIA GPU detected: $(nvidia-smi -L 2>/dev/null | head -1)"
+
+    if ! command -v nvidia-ctk >/dev/null 2>&1; then
+        info "Installing nvidia-container-toolkit (driver untouched)"
+        curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey \
+            | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg 2>/dev/null \
+            || { warn "Could not fetch the NVIDIA key — falling back to CPU encoding"; GPU_MODE="none"; }
+        if [[ "$GPU_MODE" == "nvidia" ]]; then
+            curl -fsSL https://nvidia.github.io/libnvidia-container/stable/deb/nvidia-container-toolkit.list \
+                | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' \
+                > /etc/apt/sources.list.d/nvidia-container-toolkit.list
+            apt-get update -qq
+            apt-get install -y -qq nvidia-container-toolkit >/dev/null \
+                || { warn "nvidia-container-toolkit failed to install — falling back to CPU"; GPU_MODE="none"; }
+        fi
+    fi
+
+    if [[ "$GPU_MODE" == "nvidia" ]]; then
+        # ⚠️ `nvidia-ctk runtime configure` rewrites /etc/docker/daemon.json. The
+        # change only takes effect once the Docker DAEMON is restarted — and that
+        # MUST happen here, before any container exists. Doing it later would
+        # restart every running container mid-installation.
+        nvidia-ctk runtime configure --runtime=docker >/dev/null 2>&1 \
+            || { warn "nvidia-ctk configure failed — falling back to CPU"; GPU_MODE="none"; }
+        if [[ "$GPU_MODE" == "nvidia" ]]; then
+            systemctl restart docker
+            for _ in $(seq 1 15); do docker info >/dev/null 2>&1 && break; sleep 1; done
+            docker info >/dev/null 2>&1 || fail "Docker did not come back after restart."
+            ok "NVIDIA runtime configured (Docker restarted)"
+        fi
+    fi
+fi
+
+# Intel / AMD — VAAPI and QuickSync go through the DRM render node. No package to
+# install: the kernel driver ships with Ubuntu and the image already carries the
+# userspace bits. Passing the device through is enough, and costs nothing when
+# the encoder turns out to be unusable (SignFlow falls back on its own).
+if [[ "$GPU_MODE" == "none" ]] && compgen -G "/dev/dri/renderD*" >/dev/null 2>&1; then
+    GPU_MODE="dri"
+    info "DRM render node detected: $(ls /dev/dri/renderD* | tr '\n' ' ')"
+fi
+
+case "$GPU_MODE" in
+    nvidia) ok "Hardware encoding: NVIDIA (NVENC)" ;;
+    dri)    ok "Hardware encoding: Intel/AMD (VAAPI or QuickSync)" ;;
+    none)   info "No usable GPU found — encoding on CPU (libx264). Nothing is broken." ;;
+esac
+
+# =============================================================================
 step "2/10 — Installation files"
 # =============================================================================
 
@@ -116,6 +187,50 @@ chmod +x "$INSTALL_DIR/postgres-init.sh"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 ok "Files copied to $INSTALL_DIR"
+
+# ── GPU access, when one was found at step 1b ────────────────────────────────
+# Written to docker-compose.override.yml, which Compose loads automatically:
+# `docker compose up -d` picks it up with no extra flag, including from the
+# systemd unit. Only celery-media needs it — it is the ONLY service that
+# transcodes (verified: app/core/encoders is imported by media_worker alone).
+if [[ "$GPU_MODE" != "none" ]]; then
+    if [[ -f docker-compose.override.yml ]]; then
+        warn "docker-compose.override.yml already exists — left untouched."
+        warn "GPU access NOT configured; merge it by hand if you want it."
+    elif [[ "$GPU_MODE" == "nvidia" ]]; then
+        cat > docker-compose.override.yml << 'EOF'
+# Generated by install-ubuntu.sh — NVIDIA hardware encoding.
+# Delete this file to go back to CPU encoding.
+services:
+  celery-media:
+    environment:
+      NVIDIA_VISIBLE_DEVICES: all
+      # ⚠️ "video" is what exposes NVENC. With the default capabilities the GPU
+      # appears inside the container but the encoder is absent, and ffmpeg fails
+      # with a misleading "unknown encoder h264_nvenc".
+      NVIDIA_DRIVER_CAPABILITIES: video,compute,utility
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu, video]
+EOF
+        ok "NVIDIA access written to docker-compose.override.yml"
+    else
+        cat > docker-compose.override.yml << 'EOF'
+# Generated by install-ubuntu.sh — Intel/AMD hardware encoding (VAAPI/QuickSync).
+# Delete this file to go back to CPU encoding.
+services:
+  celery-media:
+    devices:
+      - /dev/dri:/dev/dri
+EOF
+        ok "DRM render node access written to docker-compose.override.yml"
+    fi
+    chown "$SERVICE_USER:$SERVICE_USER" docker-compose.override.yml 2>/dev/null || true
+fi
 
 # ── Where the media are stored ───────────────────────────────────────────────
 # ⚠️ ASKED BEFORE THE .env IS WRITTEN, and not with the other prompts further
@@ -344,6 +459,24 @@ check "GET /playlists" "$API/playlists/" "401"
 check "GET /schedules" "$API/schedules"  "401"
 [[ $FAIL -eq 0 ]] && ok "Health checks 5/5" || warn "$FAIL check(s) failed"
 
+# ── Did hardware encoding actually come up? ──────────────────────────────────
+# Passing the device through is not proof that it works: the driver may be too
+# old, the capability missing, the node unreadable. SignFlow then falls back to
+# libx264 SILENTLY — correct behaviour, but the operator would believe the
+# server is encoding on GPU when it is not. So we ask the worker itself, inside
+# its own container, which encoders it can really use.
+if [[ "$GPU_MODE" != "none" ]]; then
+    HW=$(docker compose exec -T celery-media python3 -c \
+        "from app.core import encoders; print(','.join(encoders.detect_hw_encoders()))" 2>/dev/null | tr -d '\r')
+    if [[ -n "$HW" ]]; then
+        ok "Hardware encoding active: ${HW}"
+    else
+        warn "GPU was passed through, but NO hardware encoder is usable."
+        warn "Transcoding will run on CPU — correct, just slower."
+        warn "Inspect with: docker compose exec celery-media ffmpeg -encoders | grep -E 'nvenc|vaapi|qsv'"
+    fi
+fi
+
 # =============================================================================
 step "8/10 — Start on boot"
 # =============================================================================
@@ -544,6 +677,12 @@ echo -e "     cd ${INSTALL_DIR} && docker compose exec -T -e SHOW_TOTP_EMAIL=${A
 echo -e "       backend python3 /app/scripts/show_totp.py"
 fi
 fi
+echo ""
+case "$GPU_MODE" in
+    nvidia) echo -e "   Video encoding  : ${GREEN}NVIDIA GPU (NVENC)${NC}" ;;
+    dri)    echo -e "   Video encoding  : ${GREEN}Intel/AMD GPU (VAAPI/QuickSync)${NC}" ;;
+    none)   echo -e "   Video encoding  : CPU (libx264) — no usable GPU found" ;;
+esac
 echo ""
 echo -e "   Player configuration:"
 echo -e "     BACKEND_URL = http://${SERVER_IP}:${NGINX_PORT}"
