@@ -121,14 +121,31 @@ sudo systemctl start signflow      # start
 
 ```bash
 cd /opt/signflow
-docker compose pull
-docker compose up -d
-docker compose exec backend alembic upgrade head
+bash update.sh 1.0.5
 ```
 
-Pin a version in `.env` (`SIGNFLOW_VERSION=1.0.4`) rather than tracking `latest`:
-two servers installed a month apart would otherwise run different code, and any
-incident would become impossible to reproduce.
+The script pins the version, pulls the images, restarts, migrates the database,
+**re-indexes the product documentation** and checks that everything came back up.
+
+Two of those steps are easy to miss when updating by hand, and both fail
+quietly:
+
+- **Registry login.** The installer runs under `sudo`, so `docker login` stored
+  the credentials for *root*. Running `docker compose pull` as your own user
+  then fails with *"repository does not exist or may require authorization"* —
+  a message that sends you looking for a missing image rather than a missing
+  login. Fix it once:
+  ```bash
+  docker login registry.dernoult.net:8443 -u signflow-client
+  ```
+- **Documentation index.** The AI assistant answers from an indexed copy of the
+  manual. Indexing happens at install time, so an installation created before a
+  release that adds documentation would never catch up — with no error anywhere,
+  just an assistant that does not know the feature you are asking about.
+
+Always pin a version rather than tracking `latest`: two servers installed a
+month apart would otherwise run different code, and any incident would become
+impossible to reproduce.
 
 ### Backups
 

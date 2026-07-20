@@ -27,7 +27,7 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/opt/signflow"
 REGISTRY="${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}"
-VERSION="${SIGNFLOW_VERSION:-1.0.4}"
+VERSION="${SIGNFLOW_VERSION:-1.0.5}"
 
 # Owner of the configuration files: whoever ran `sudo`, so they can edit them
 # without root. Falls back to root when that account does not exist.
@@ -463,6 +463,31 @@ ok "Migrations applied"
 
 docker compose exec -T backend python /app/scripts/create_bucket.py
 ok "Media storage ready"
+
+# ── Assistant knowledge base ─────────────────────────────────────────────────
+# Without this, a fresh install ships an AI assistant that knows nothing about
+# the product: `cms_doc_chunks` is empty, so every documentation lookup returns
+# nothing and the assistant answers from general knowledge instead of from this
+# installation's manual. Found on 2026-07-20 while auditing why a new page was
+# invisible to the assistant.
+#
+# Embeddings go through litellm -> ollama, and ollama has to PULL its embedding
+# model on first boot (a couple of minutes). We therefore wait for it, and treat
+# a failure as non-fatal: the CMS itself is perfectly usable without the
+# assistant, and indexing can be replayed at any time.
+info "Indexing product documentation (assistant)..."
+KB_WAIT=0
+until docker compose exec -T litellm python3 -c         "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)"         >/dev/null 2>&1 || [[ $KB_WAIT -ge 180 ]]; do
+    sleep 10; KB_WAIT=$((KB_WAIT + 10))
+done
+KB=$(docker compose exec -T backend python3 -c     "from app.services.doc_index import index_all_docs; r = index_all_docs(); print(f\"{r['files']} files, {r['chunks']} chunks, {r['embedded']} embedded, {len(r['errors'])} errors\")"     2>/dev/null | tr -d '')
+if [[ -n "$KB" && "$KB" != *", 0 embedded"* ]]; then
+    ok "Assistant documentation indexed (${KB})"
+else
+    warn "Assistant documentation NOT indexed — the AI assistant will not know the manual."
+    warn "  Replay later with:"
+    warn "    docker compose exec -T backend python3 -c \"from app.services.doc_index import index_all_docs; print(index_all_docs())\""
+fi
 
 # =============================================================================
 step "7/10 — Health checks"
