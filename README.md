@@ -101,9 +101,21 @@ cd /opt/signflow
 
 docker compose ps                  # service status
 docker compose logs -f backend     # logs
-systemctl stop signflow            # stop
-systemctl start signflow           # start
+sudo systemctl stop signflow       # stop
+sudo systemctl start signflow      # start
 ```
+
+> **When do you need `sudo`?** `systemctl` always does. The `docker compose`
+> commands do **not**, because the installer added the account that ran it to the
+> `docker` group. Two cases still require care:
+> - **Right after installation**, that group membership is not active in your
+>   current session — log out and back in, or prefix docker commands with `sudo`
+>   until you do.
+> - **Any other account** on the machine must either be added to the `docker`
+>   group (`sudo usermod -aG docker <user>`) or use `sudo`.
+>
+> ⚠️ Membership of the `docker` group grants root-equivalent access to the host.
+> Grant it deliberately, not to every user on the machine.
 
 ### Updating
 

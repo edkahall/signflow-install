@@ -374,6 +374,36 @@ if [[ -z "${SIGNFLOW_REGISTRY_USER:-}" ]]; then
     echo ""
 fi
 
+# ── Organisation name ────────────────────────────────────────────────────────
+# The organisation is what the customer sees at the top of the interface, in
+# report headers and in the emails SignFlow sends. Left unasked it silently
+# became "SignFlow" for everyone — our own product name on the customer's
+# screens (reported by Ed, 2026-07-20).
+if [[ -z "${ORG_NAME:-}" ]]; then
+    echo ""
+    info "Name of your organisation (shown in the interface and on reports)"
+    read -rp "    Organisation [SignFlow]: " ORG_NAME
+    ORG_NAME="${ORG_NAME:-SignFlow}"
+fi
+
+# The slug identifies the organisation in URLs and generated identifiers, so it
+# has to be ASCII, lowercase, without spaces. Derived rather than asked: one less
+# question, and a hand-typed slug is a reliable source of mistakes.
+#
+# ⚠️ `iconv //TRANSLIT` does not simply drop accents, it emits the ACCENT MARK as
+# a separate character: "Média" comes out as "M'edia". Left in, that apostrophe
+# becomes a separator and yields "dernoult-m-edia". The marks are therefore
+# deleted BEFORE punctuation is collapsed. The bug was invisible on a name
+# starting with an accent ("Éclair" → "eclair"), because the leading separator is
+# stripped anyway — which is exactly why it was worth testing mid-word.
+ORG_SLUG=$(echo "$ORG_NAME" \
+    | iconv -f UTF-8 -t ASCII//TRANSLIT 2>/dev/null \
+    | tr -d "'\`^\"~" \
+    | tr '[:upper:]' '[:lower:]' \
+    | sed -e 's/[^a-z0-9]\+/-/g' -e 's/^-//' -e 's/-$//')
+[[ -n "$ORG_SLUG" ]] || ORG_SLUG="signflow"
+info "Organisation: ${ORG_NAME} (identifier: ${ORG_SLUG})"
+
 # Asked here so every prompt happens up front, rather than stopping the install
 # ten minutes later.
 if [[ -z "${ADMIN_EMAIL:-}" ]]; then
@@ -604,6 +634,8 @@ if [[ "$EXISTING" == "0" ]]; then
     if docker compose exec -T \
         -e BOOTSTRAP_ADMIN_EMAIL="${ADMIN_EMAIL}" \
         -e BOOTSTRAP_ADMIN_PASSWORD="$ADMIN_PASSWORD" \
+        -e BOOTSTRAP_ORG_NAME="${ORG_NAME}" \
+        -e BOOTSTRAP_ORG_SLUG="${ORG_SLUG}" \
         backend python3 /app/scripts/bootstrap.py >/dev/null; then
         ok "Organisation and administrator account created"
 
@@ -662,6 +694,7 @@ echo -e "   Web interface   : ${CYAN}http://${SERVER_IP}:${NGINX_PORT}${NC}"
 if [[ -n "$ADMIN_PASSWORD" ]]; then
 echo ""
 echo -e "   ${YELLOW}Administrator credentials — WRITE THESE DOWN, they are shown only once:${NC}"
+echo -e "     Organisation : ${ORG_NAME}"
 echo -e "     Email    : ${ADMIN_EMAIL}"
 echo -e "     Password : ${ADMIN_PASSWORD}"
 echo ""
@@ -688,12 +721,16 @@ echo -e "   Player configuration:"
 echo -e "     BACKEND_URL = http://${SERVER_IP}:${NGINX_PORT}"
 echo ""
 echo -e "   Logs            : cd ${INSTALL_DIR} && docker compose logs -f backend"
-echo -e "   Stop / start    : systemctl stop signflow / systemctl start signflow"
+echo -e "   Stop / start    : sudo systemctl stop signflow / sudo systemctl start signflow"
 echo -e "   Update          : cd ${INSTALL_DIR} && docker compose pull && docker compose up -d"
 echo ""
+echo -e "   ${YELLOW}About sudo:${NC} systemctl always needs it. The docker commands do NOT,"
+echo -e "   because ${SERVICE_USER} was added to the 'docker' group. Any other account"
+echo -e "   must either join that group or prefix docker with sudo."
+echo ""
 if [[ -n "${DOCKER_GROUP_ADDED:-}" ]]; then
-echo -e "   ${YELLOW}Log out and back in${NC} before running docker commands as ${SERVICE_USER},"
-echo -e "   or they will fail with \"permission denied\" until the new group applies."
+echo -e "   ${YELLOW}Log out and back in${NC} before running docker commands as ${SERVICE_USER}:"
+echo -e "   until then they fail with \"permission denied\" and need sudo."
 echo ""
 fi
 echo -e "   ${YELLOW}Back up ${INSTALL_DIR}/.env${NC} — it holds this installation's encryption keys."
