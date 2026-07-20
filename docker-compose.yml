@@ -274,5 +274,20 @@ services:
 volumes:
   postgres_data:
   redis_data:
+  # Media are the only dataset that grows without bound (a signage library
+  # reaches hundreds of gigabytes). A bare named volume would write them under
+  # /var/lib/docker — on the SYSTEM disk, usually the smallest in the machine.
+  #
+  # This bind mount makes the location explicit and movable: MEDIA_DATA_PATH is
+  # asked for at install time and can point at a large disk.
+  # ⚠️ The directory must EXIST before the first start: Docker does not create it
+  # for an `o: bind` volume and fails with an unhelpful error.
+  # ⚠️ Avoid NFS/CIFS: MinIO relies on POSIX semantics that file shares do not
+  # guarantee. A NAS is fine as a BLOCK device (iSCSI), not as a file share.
   minio_data:
+    driver: local
+    driver_opts:
+      type: none
+      o: bind
+      device: ${MEDIA_DATA_PATH:-/var/lib/signflow/media}
   ollama_data:

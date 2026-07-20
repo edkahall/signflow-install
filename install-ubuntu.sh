@@ -27,7 +27,7 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/opt/signflow"
 REGISTRY="${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}"
-VERSION="${SIGNFLOW_VERSION:-1.0.0}"
+VERSION="${SIGNFLOW_VERSION:-1.0.1}"
 
 # Owner of the configuration files: whoever ran `sudo`, so they can edit them
 # without root. Falls back to root when that account does not exist.
@@ -117,6 +117,57 @@ chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 cd "$INSTALL_DIR"
 ok "Files copied to $INSTALL_DIR"
 
+# ── Where the media are stored ───────────────────────────────────────────────
+# ⚠️ ASKED BEFORE THE .env IS WRITTEN, and not with the other prompts further
+# down: the value is written INTO the .env by the next step. Placed after it,
+# the variable would still be empty at write time and every installation would
+# silently fall back to the system disk — the exact problem this solves.
+#
+# Media live in MinIO. Left alone, MinIO writes into a named Docker volume, i.e.
+# under /var/lib/docker on the SYSTEM disk — the worst possible place for the
+# one dataset that grows without bound. A signage library reaches hundreds of
+# gigabytes; the system disk is usually the smallest one in the machine.
+#
+# Asking now, before anything is created, is the only cheap moment: once MinIO
+# has written its first object, moving the store means stopping the stack and
+# copying the data across by hand.
+if [[ -z "${MEDIA_DATA_PATH:-}" ]]; then
+    echo ""
+    info "Where should MEDIA be stored? (videos, images — this is what grows)"
+    echo "    Leave empty for the default. Point it at a large disk if you have one."
+    read -rp "    Path [/var/lib/signflow/media]: " MEDIA_DATA_PATH
+    MEDIA_DATA_PATH="${MEDIA_DATA_PATH:-/var/lib/signflow/media}"
+fi
+
+[[ "$MEDIA_DATA_PATH" = /* ]] || fail "Media path must be absolute: '${MEDIA_DATA_PATH}'"
+# Docker does NOT create the directory for an `o: bind` volume: it fails with an
+# unhelpful error at first start. Create it here.
+mkdir -p "$MEDIA_DATA_PATH" || fail "Cannot create '${MEDIA_DATA_PATH}'."
+
+# ⚠️ MinIO stores objects on a POSIX filesystem and relies on its semantics.
+# NFS and above all SMB/CIFS do not provide them reliably: the failure mode is
+# not a clear error at startup but silent corruption and locking stalls under
+# load. A network NAS is fine as a *block* device (iSCSI, mounted as ext4/xfs);
+# it is not fine as a file share. Warn rather than refuse — the operator may
+# know exactly what they are doing.
+MEDIA_FSTYPE=$(findmnt -n -o FSTYPE --target "$MEDIA_DATA_PATH" 2>/dev/null || echo "")
+case "$MEDIA_FSTYPE" in
+    nfs|nfs4|cifs|smb3|fuse.sshfs|fuse.s3fs)
+        warn "'${MEDIA_DATA_PATH}' is on a ${MEDIA_FSTYPE} share."
+        warn "MinIO needs POSIX semantics that file shares do not guarantee —"
+        warn "expect stalls and possible corruption. Prefer a local disk, an"
+        warn "iSCSI block device, or point SignFlow at an external S3 endpoint."
+        read -rp "    Use it anyway? [y/N] " a
+        [[ "${a,,}" == "y" ]] || fail "Aborted — choose a local path."
+        ;;
+esac
+
+MEDIA_AVAIL=$(df -BG --output=avail "$MEDIA_DATA_PATH" 2>/dev/null | tail -1 | tr -dc '0-9')
+if [[ -n "$MEDIA_AVAIL" && "$MEDIA_AVAIL" -lt 50 ]]; then
+    warn "Only ${MEDIA_AVAIL} GB free on '${MEDIA_DATA_PATH}' — media fill a disk fast."
+fi
+ok "Media stored in ${MEDIA_DATA_PATH} (${MEDIA_FSTYPE:-unknown fs}, ${MEDIA_AVAIL:-?} GB free)"
+
 # =============================================================================
 step "3/10 — Configuration (.env)"
 # =============================================================================
@@ -152,6 +203,9 @@ POSTGRES_APP_PASSWORD=${PG_APP_PASSWORD}
 POSTGRES_WORKER_PASSWORD=${PG_WORKER_PASSWORD}
 
 # ── Media storage ─────────────────────────────────────────────────────────────
+# Host directory holding every media object. Chosen at install time; moving it
+# later means stopping the stack and copying the data across by hand.
+MEDIA_DATA_PATH=${MEDIA_DATA_PATH}
 MINIO_ACCESS_KEY=${MINIO_KEY}
 MINIO_SECRET_KEY=${MINIO_SECRET}
 # The address BROWSERS and PLAYERS use to download media.

@@ -114,7 +114,7 @@ docker compose up -d
 docker compose exec backend alembic upgrade head
 ```
 
-Pin a version in `.env` (`SIGNFLOW_VERSION=1.0.0`) rather than tracking `latest`:
+Pin a version in `.env` (`SIGNFLOW_VERSION=1.0.1`) rather than tracking `latest`:
 two servers installed a month apart would otherwise run different code, and any
 incident would become impossible to reproduce.
 
@@ -124,9 +124,34 @@ Three things to back up:
 
 1. **`/opt/signflow/.env`** — encryption keys, irreplaceable;
 2. **the database** — `docker compose exec -T postgres pg_dump -U signflow -Fc signflow > backup.dump`;
-3. **the media** — Docker volume `signflow_minio_data`.
+3. **the media** — the directory named by `MEDIA_DATA_PATH` in `.env`
+   (default `/var/lib/signflow/media`). It is a plain host directory, so a
+   file-level backup of that path is enough.
 
 Images need no backup: they can always be pulled again.
+
+### Where the media are stored
+
+The installer asks for this and writes it to `MEDIA_DATA_PATH`. It is worth
+answering deliberately: **media are the only dataset that grows without bound**,
+and left to itself Docker would put them under `/var/lib/docker` — on the system
+disk, usually the smallest one in the machine.
+
+- **Local disk** — the recommended answer. Mount your large disk, then give its
+  path (for example `/mnt/storage/signflow-media`).
+- **NAS** — fine as a **block device** (iSCSI mounted as ext4/xfs). Avoid NFS and
+  especially SMB/CIFS: MinIO relies on POSIX semantics that file shares do not
+  guarantee, and the failure mode is not a clean error at startup but stalls and
+  possible corruption under load. The installer warns and asks for confirmation.
+- **An existing S3 service** — if you already run object storage (some NAS
+  provide an S3 endpoint), you can skip the bundled MinIO entirely: point
+  `MINIO_ENDPOINT`, `MINIO_ACCESS_KEY` and `MINIO_SECRET_KEY` at it and remove
+  the `minio` service from the compose file.
+
+> ⚠️ **Choose before the first start.** Changing `MEDIA_DATA_PATH` later does not
+> move anything: you must stop the stack, copy the directory across, then start
+> again. The database keeps the object names, so a partial copy shows up as
+> media that exist in the interface but fail to load on the screens.
 
 ---
 
