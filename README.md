@@ -126,7 +126,7 @@ docker compose up -d
 docker compose exec backend alembic upgrade head
 ```
 
-Pin a version in `.env` (`SIGNFLOW_VERSION=1.0.1`) rather than tracking `latest`:
+Pin a version in `.env` (`SIGNFLOW_VERSION=1.0.4`) rather than tracking `latest`:
 two servers installed a month apart would otherwise run different code, and any
 incident would become impossible to reproduce.
 
