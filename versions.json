@@ -1,0 +1,23 @@
+{
+  "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
+  "latest": "1.0.6",
+  "releases": [
+    {
+      "version": "1.0.6",
+      "date": "2026-07-21",
+      "notes": {
+        "en": "Adds the in-app 'update available' notification: your server now tells you when a newer version is published.",
+        "fr": "Ajoute la notification de mise a jour dans l'application : votre serveur vous signale desormais quand une version plus recente est publiee."
+      }
+    },
+    {
+      "version": "1.0.5",
+      "date": "2026-07-20",
+      "security": true,
+      "notes": {
+        "en": "Fixes a privilege-escalation vulnerability (role/group assignment). Role permissions and read-only guards hardened. Upgrade strongly recommended.",
+        "fr": "Corrige une faille d'escalade de privileges (affectation de roles/groupes). Permissions des roles et gardes en lecture seule durcies. Mise a jour fortement recommandee."
+      }
+    }
+  ]
+}

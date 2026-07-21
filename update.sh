@@ -24,6 +24,9 @@ set -euo pipefail
 
 VERSION="${1:-}"
 REGISTRY="${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}"
+# Where the STATIC client files live (compose, configs, this very script). The
+# public install repo, tracking the latest published release.
+BASE_URL="${SIGNFLOW_INSTALL_BASE_URL:-https://raw.githubusercontent.com/edkahall/signflow-install/main}"
 
 RED=$'\033[0;31m'; GREEN=$'\033[0;32m'; YELLOW=$'\033[1;33m'; CYAN=$'\033[0;36m'; NC=$'\033[0m'
 step() { echo -e "\n${CYAN}==>${NC} $*"; }
@@ -34,6 +37,27 @@ fail() { echo -e "  ${RED}FAIL${NC} $*" >&2; exit 1; }
 [[ -n "$VERSION" ]] || fail "Missing version. Example: bash update.sh 1.0.5"
 [[ -f docker-compose.yml && -f .env ]] \
     || fail "Run this from the installation directory (/opt/signflow)."
+
+# ── 0. Self-refresh ──────────────────────────────────────────────────────────
+# The images are versioned in the registry, but the STATIC files (this script,
+# docker-compose.yml, configs) are not — they live in the install repo. Without
+# this, a release that changes the compose plumbing never reaches an existing
+# install: the images update but the container keeps the old wiring. That is
+# exactly how a 1.0.6 backend ended up still reporting version "dev" — its
+# compose predated the SIGNFLOW_VERSION passthrough. So before anything, pull the
+# newest version of THIS script and re-exec it once if it changed.
+if [[ -z "${SIGNFLOW_SELF_REFRESHED:-}" ]]; then
+    if curl -fsSL "${BASE_URL}/update.sh" -o update.sh.new 2>/dev/null; then
+        if ! cmp -s update.sh.new update.sh 2>/dev/null; then
+            cp update.sh "update.sh.bak.$(date +%Y%m%d-%H%M%S)"
+            mv update.sh.new update.sh
+            chmod +x update.sh 2>/dev/null || true
+            echo -e "${CYAN}==>${NC} update.sh refreshed — re-running the new version"
+            SIGNFLOW_SELF_REFRESHED=1 exec bash update.sh "$VERSION"
+        fi
+        rm -f update.sh.new
+    fi
+fi
 
 # ── 1. Registry access, checked BEFORE touching anything ─────────────────────
 step "Checking registry access"
@@ -56,6 +80,26 @@ else
     echo "SIGNFLOW_VERSION=${VERSION}" >> .env
 fi
 ok "${CURRENT} -> ${VERSION}"
+
+# ── 2b. Refresh the static deployment files ──────────────────────────────────
+# docker-compose.yml (topology + env passthroughs) and the service configs are
+# shipped files, not images — a release can change them (a new env var handed to
+# the backend, a new service). They are meant to be replaced wholesale; local
+# customisation lives in docker-compose.override.yml and .env, which we never
+# touch here. Best-effort: offline, we keep what's there and warn. Each file is
+# backed up before replacement.
+step "Refreshing deployment files"
+refresh_file() {
+    local f="$1"
+    curl -fsSL "${BASE_URL}/${f}" -o "${f}.new" 2>/dev/null || { warn "Could not fetch ${f} (kept current)"; rm -f "${f}.new"; return; }
+    if [[ -f "$f" ]] && cmp -s "${f}.new" "$f"; then
+        rm -f "${f}.new"; return   # unchanged
+    fi
+    [[ -f "$f" ]] && cp "$f" "${f}.bak.$(date +%Y%m%d-%H%M%S)"
+    mv "${f}.new" "$f"
+    ok "${f} updated"
+}
+for f in docker-compose.yml litellm-config.yaml postgres-init.sh; do refresh_file "$f"; done
 
 # ── 3. Images, containers, schema ────────────────────────────────────────────
 step "Downloading images"

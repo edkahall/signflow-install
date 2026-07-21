@@ -183,6 +183,16 @@ for f in docker-compose.yml postgres-init.sh litellm-config.yaml; do
     [[ -f "$SRC_DIR/$f" ]] || fail "Missing file: $f (incomplete download?)"
     cp "$SRC_DIR/$f" "$INSTALL_DIR/$f"
 done
+# update.sh is the supported upgrade path (pull + migrate + REINDEX the assistant
+# docs, which a bare `compose pull` skips). Copy it so it is there when needed;
+# absent, an operator would fall back to a manual pull and the assistant would
+# never catch up on new documentation. Optional in the download — warn, do not fail.
+if [[ -f "$SRC_DIR/update.sh" ]]; then
+    cp "$SRC_DIR/update.sh" "$INSTALL_DIR/update.sh"
+    chmod +x "$INSTALL_DIR/update.sh"
+else
+    warn "update.sh not found next to the installer — updates will be manual"
+fi
 chmod +x "$INSTALL_DIR/postgres-init.sh"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -431,6 +441,26 @@ echo "${SIGNFLOW_REGISTRY_PASSWORD}" \
     | docker login "$REGISTRY" -u "$SIGNFLOW_REGISTRY_USER" --password-stdin >/dev/null 2>&1 \
     || fail "Registry authentication refused — check your credentials"
 ok "Authenticated with $REGISTRY"
+
+# ── Store the same login for the OPERATOR, not just root ─────────────────────
+# This script runs under sudo, so the login above landed in ROOT's
+# ~/.docker/config.json. The operator (SERVICE_USER, added to the docker group)
+# runs `docker compose` as THEMSELVES — and their first pull on their own, i.e.
+# the first UPDATE, would die with "repository does not exist or may require
+# authorization": a missing login that reads like a missing image. Storing the
+# credential for them now, while the password is in hand, is what makes
+# `docker compose pull` (and update.sh) just work later without a re-login.
+# Best-effort: update.sh degrades gracefully if this ever fails.
+if [[ "$SERVICE_USER" != "root" ]]; then
+    if echo "${SIGNFLOW_REGISTRY_PASSWORD}" \
+        | sudo -u "$SERVICE_USER" -H docker login "$REGISTRY" \
+            -u "$SIGNFLOW_REGISTRY_USER" --password-stdin >/dev/null 2>&1; then
+        ok "Registry login also stored for $SERVICE_USER (updates need no re-login)"
+    else
+        warn "Could not store the registry login for $SERVICE_USER — an update may"
+        warn "  ask for 'docker login ${REGISTRY}' first. Not fatal."
+    fi
+fi
 
 info "Downloading (~1 GB, a few minutes depending on your connection)..."
 docker compose pull --quiet || fail "Could not download the images"
@@ -747,7 +777,7 @@ echo -e "     BACKEND_URL = http://${SERVER_IP}:${NGINX_PORT}"
 echo ""
 echo -e "   Logs            : cd ${INSTALL_DIR} && docker compose logs -f backend"
 echo -e "   Stop / start    : sudo systemctl stop signflow / sudo systemctl start signflow"
-echo -e "   Update          : cd ${INSTALL_DIR} && docker compose pull && docker compose up -d"
+echo -e "   Update          : cd ${INSTALL_DIR} && bash update.sh <version>   (e.g. ${VERSION})"
 echo ""
 echo -e "   ${YELLOW}About sudo:${NC} systemctl always needs it. The docker commands do NOT,"
 echo -e "   because ${SERVICE_USER} was added to the 'docker' group. Any other account"

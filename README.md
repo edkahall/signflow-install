@@ -119,6 +119,12 @@ sudo systemctl start signflow      # start
 
 ### Updating
 
+When a newer version is published, an **"update available" bell appears in the
+top bar** for organisation admins. It shows which version to install, what
+changed, whether the update is a security fix, and the exact command to run — so
+you never have to watch for releases yourself. (A server built from source shows
+no bell: there is no pinned version to compare.)
+
 ```bash
 cd /opt/signflow
 bash update.sh 1.0.5

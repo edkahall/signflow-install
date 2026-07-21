@@ -45,6 +45,15 @@ x-app-env: &app-env
   # (a `rand -hex` value is REJECTED).
   CMS_VAULT_KEY: ${CMS_VAULT_KEY:?CMS_VAULT_KEY is missing}
   SIGNFLOW_TZ: ${SIGNFLOW_TZ:-Europe/Paris}
+  # Pinned release tag, surfaced in the UI (sidebar footer) so an operator can
+  # read at a glance which version this server runs. Same value that pins the
+  # image tags above.
+  SIGNFLOW_VERSION: ${SIGNFLOW_VERSION:-dev}
+  # "Update available" bell: the backend polls this public manifest and compares it
+  # to SIGNFLOW_VERSION. Leave BELL=true on a self-hosted install so the operator is
+  # notified; a source build ("dev") stays silent regardless.
+  SIGNFLOW_UPDATE_MANIFEST_URL: ${SIGNFLOW_UPDATE_MANIFEST_URL:-https://raw.githubusercontent.com/edkahall/signflow-install/main/versions.json}
+  SIGNFLOW_UPDATE_BELL: ${SIGNFLOW_UPDATE_BELL:-true}
   PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
   CORS_ORIGINS: ${CORS_ORIGINS:-'[]'}
   # Player machine tokens: rotated on reconnect, so screens never go dark
