@@ -1,7 +1,15 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
-  "latest": "1.0.6",
+  "latest": "1.0.7",
   "releases": [
+    {
+      "version": "1.0.7",
+      "date": "2026-07-21",
+      "notes": {
+        "en": "New system roles and role-based read-only guards across the interface: each role now sees and edits only what its permissions allow (governance manager, site programmer, and hardened viewer/approver/scheduler/campaign-manager profiles).",
+        "fr": "Nouveaux roles systeme et gardes lecture-seule par role dans toute l'interface : chaque role ne voit et ne modifie que ce que ses permissions autorisent (gestionnaire de gouvernance, programmeur de site, profils viewer/approbateur/planificateur/campaign-manager durcis)."
+      }
+    },
     {
       "version": "1.0.6",
       "date": "2026-07-21",
