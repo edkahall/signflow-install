@@ -1,7 +1,15 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
-  "latest": "1.0.7",
+  "latest": "1.0.8",
   "releases": [
+    {
+      "version": "1.0.8",
+      "date": "2026-07-22",
+      "notes": {
+        "en": "Update your players from your own server: import player versions (Linux/RPi/Windows/Android) by URL or file, and pin BrightSign/ChromeOS renderer versions so a server update never moves a player until you deploy it (test on a sandbox first). Also fixes the AI assistant for BYOK organizations and shows names instead of IDs in the dashboard activity feed.",
+        "fr": "Mettez a jour vos players depuis votre propre serveur : importez les versions des players (Linux/RPi/Windows/Android) par URL ou fichier, et epinglez les versions de renderer BrightSign/ChromeOS pour qu'une mise a jour serveur ne bouge jamais un player tant que vous ne l'avez pas deploye (testez sur un bac a sables d'abord). Corrige aussi l'assistant IA pour les organisations BYOK et affiche des noms au lieu d'identifiants dans le fil d'activite."
+      }
+    },
     {
       "version": "1.0.7",
       "date": "2026-07-21",
