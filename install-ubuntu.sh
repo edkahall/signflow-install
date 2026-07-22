@@ -790,3 +790,17 @@ echo ""
 fi
 echo -e "   ${YELLOW}Back up ${INSTALL_DIR}/.env${NC} — it holds this installation's encryption keys."
 echo ""
+
+# ── Optional: automatic daily DATABASE backup to external storage ────────────
+read -rp "Set up an automatic daily DATABASE backup now? (requires storage EXTERNAL to this server) [y/N] " SETUP_BAK
+if [[ "${SETUP_BAK,,}" == "y" ]]; then
+    read -rp "  Backup directory (mounted NAS share or external disk, e.g. /mnt/nas/signflow): " BAK_DIR
+    read -rp "  Keep how many days? [14]: " BAK_RET; BAK_RET=${BAK_RET:-14}
+    if [[ -z "$BAK_DIR" ]] || ! ( cd "$INSTALL_DIR" && bash setup-backup.sh --user "$SERVICE_USER" --dir "$BAK_DIR" --retention "${BAK_RET:-14}" ); then
+        echo -e "   ${YELLOW}Backup not configured.${NC} Set it up later: cd ${INSTALL_DIR} && bash setup-backup.sh"
+    fi
+else
+    echo -e "   No automatic backup. Set one up any time: cd ${INSTALL_DIR} && bash setup-backup.sh"
+    echo -e "   (A one-off dump into ${INSTALL_DIR}/db-snapshots/ still runs before every update's migrations.)"
+fi
+echo ""

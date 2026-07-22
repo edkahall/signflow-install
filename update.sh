@@ -99,7 +99,7 @@ refresh_file() {
     mv "${f}.new" "$f"
     ok "${f} updated"
 }
-for f in docker-compose.yml litellm-config.yaml postgres-init.sh; do refresh_file "$f"; done
+for f in docker-compose.yml litellm-config.yaml postgres-init.sh setup-backup.sh signflow-db-backup.sh; do refresh_file "$f"; done
 
 # ── 3. Images, containers, schema ────────────────────────────────────────────
 step "Downloading images"
@@ -112,8 +112,25 @@ ok "Services restarted"
 
 step "Applying database migrations"
 sleep 15
+
+# Pre-migration database snapshot — the local rollback point. A migration can change the
+# schema irreversibly; this dump lets you restore the database if it goes wrong. It is SEPARATE
+# from any external daily backup (setup-backup.sh) and always runs, whether or not the client
+# configured automatic backups. Best-effort (a failure warns, never blocks) + rotated (last 3).
+PG_USER=$(grep -E '^POSTGRES_USER=' .env | cut -d= -f2 | tr -d '"'); PG_USER=${PG_USER:-signflow}
+PG_DB=$(grep -E '^POSTGRES_DB=' .env | cut -d= -f2 | tr -d '"'); PG_DB=${PG_DB:-signflow}
+mkdir -p db-snapshots
+SNAP="db-snapshots/pre-${VERSION}-$(date +%Y%m%d-%H%M%S).sql.gz"
+if docker compose exec -T postgres pg_dump -U "$PG_USER" "$PG_DB" 2>/dev/null | gzip > "$SNAP" && [[ -s "$SNAP" ]]; then
+    ok "Pre-migration snapshot: $SNAP ($(du -h "$SNAP" 2>/dev/null | cut -f1))"
+    ls -1t db-snapshots/pre-*.sql.gz 2>/dev/null | tail -n +4 | xargs -r rm -f   # keep last 3
+else
+    rm -f "$SNAP"
+    warn "Pre-migration snapshot FAILED (disk space / postgres?). Continuing — but no rollback point."
+fi
+
 docker compose exec -T backend alembic upgrade head >/dev/null 2>&1 \
-    || fail "Migrations failed — the previous .env backup lets you roll back."
+    || fail "Migrations failed — restore db-snapshots/ (gunzip | psql) and roll back the .env backup."
 ok "Schema up to date"
 
 # ── 4. Documentation index ───────────────────────────────────────────────────
