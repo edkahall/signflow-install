@@ -127,8 +127,12 @@ no bell: there is no pinned version to compare.)
 
 ```bash
 cd /opt/signflow
-bash update.sh 1.0.5
+bash update.sh <version>     # the version shown by the bell, e.g. 1.0.9
 ```
+
+> Always pass the version the bell shows. Passing an **older** version downgrades
+> the application against a database that has already been migrated forward, which
+> is not a supported state.
 
 The script pins the version, pulls the images, restarts, migrates the database,
 **re-indexes the product documentation** and checks that everything came back up.
@@ -140,9 +144,10 @@ quietly:
   the credentials for *root*. Running `docker compose pull` as your own user
   then fails with *"repository does not exist or may require authorization"* —
   a message that sends you looking for a missing image rather than a missing
-  login. Fix it once:
+  login. Fix it once, using **your own registry credentials** — the username is
+  your licence id (e.g. `SF-2026-ACME`), supplied with your licence:
   ```bash
-  docker login registry.dernoult.net:8443 -u signflow-client
+  docker login registry.dernoult.net:8443 -u <your-licence-id>
   ```
 - **Documentation index.** The AI assistant answers from an indexed copy of the
   manual. Indexing happens at install time, so an installation created before a

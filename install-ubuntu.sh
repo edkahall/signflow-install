@@ -27,7 +27,7 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/opt/signflow"
 REGISTRY="${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}"
-VERSION="${SIGNFLOW_VERSION:-1.0.8}"
+VERSION="${SIGNFLOW_VERSION:-1.0.9}"
 
 # Owner of the configuration files: whoever ran `sudo`, so they can edit them
 # without root. Falls back to root when that account does not exist.
@@ -366,6 +366,13 @@ ANTHROPIC_API_KEY=
 # ── Kahall ERP integration (optional) ─────────────────────────────────────────
 ERP_API_URL=
 ERP_SSO_ENABLED=false
+
+# ── Product licence ───────────────────────────────────────────────────────────
+# PUBLIC key of the publisher, used to verify the licence file locally (there is
+# no phone-home). Supplied with your licence. Leave empty and the server simply
+# runs "unlicensed": nothing is restricted, and playback is never affected.
+# The licence file itself goes to ./config/licence.json (mounted into the stack).
+SIGNFLOW_LICENCE_PUBLIC_KEY=${LICENCE_PUBLIC_KEY}
 EOF
     chmod 600 .env
     chown "$SERVICE_USER:$SERVICE_USER" .env
@@ -382,6 +389,35 @@ if [[ -z "${SIGNFLOW_REGISTRY_USER:-}" ]]; then
     read -rp "    Username: " SIGNFLOW_REGISTRY_USER
     read -rsp "    Password: " SIGNFLOW_REGISTRY_PASSWORD
     echo ""
+fi
+
+# ── Product licence (optional at install time) ───────────────────────────────
+# Verified LOCALLY against the publisher's public key — no call home, so a server
+# on a closed network works exactly the same. Skipping this leaves the server
+# "unlicensed": NOTHING is restricted and playback is never affected; the licence
+# can be dropped in later from the banner in the interface.
+mkdir -p config
+chown "$SERVICE_USER:$SERVICE_USER" config
+if [[ -z "${LICENCE_PUBLIC_KEY:-}" ]]; then
+    echo ""
+    info "Licence public key (supplied with your licence — press Enter to skip)"
+    read -rp "    Public key: " LICENCE_PUBLIC_KEY
+fi
+if [[ -n "${LICENCE_PUBLIC_KEY:-}" && ! -f config/licence.json ]]; then
+    echo ""
+    info "Path to your licence file (press Enter to drop it in later)"
+    read -rp "    licence.json: " LICENCE_FILE
+    if [[ -n "${LICENCE_FILE:-}" ]]; then
+        if [[ -f "$LICENCE_FILE" ]]; then
+            # The server reads the file as `utf-8-sig` and tolerates a BOM, but we
+            # strip it here so the file stays readable by any tool.
+            sed '1s/^ï»¿//' "$LICENCE_FILE" > config/licence.json
+            chown "$SERVICE_USER:$SERVICE_USER" config/licence.json
+            ok "Licence installed (config/licence.json)"
+        else
+            warn "File not found: $LICENCE_FILE — continuing unlicensed."
+        fi
+    fi
 fi
 
 # ── Organisation name ────────────────────────────────────────────────────────
@@ -510,7 +546,8 @@ KB_WAIT=0
 until docker compose exec -T litellm python3 -c         "import urllib.request; urllib.request.urlopen('http://localhost:4000/health/liveliness', timeout=5)"         >/dev/null 2>&1 || [[ $KB_WAIT -ge 180 ]]; do
     sleep 10; KB_WAIT=$((KB_WAIT + 10))
 done
-KB=$(docker compose exec -T backend python3 -c     "from app.services.doc_index import index_all_docs; r = index_all_docs(); print(f\"{r['files']} files, {r['chunks']} chunks, {r['embedded']} embedded, {len(r['errors'])} errors\")"     2>/dev/null | tr -d '')
+KB=$(docker compose exec -T backend python3 -c     "from app.services.doc_index import index_all_docs; r = index_all_docs(); print(f\"{r['files']} files, {r['chunks']} chunks, {r['embedded']} embedded, {len(r['errors'])} errors\")"     2>/dev/null | tr -d '
+')
 if [[ -n "$KB" && "$KB" != *", 0 embedded"* ]]; then
     ok "Assistant documentation indexed (${KB})"
 else

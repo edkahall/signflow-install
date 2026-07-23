@@ -54,6 +54,15 @@ x-app-env: &app-env
   # notified; a source build ("dev") stays silent regardless.
   SIGNFLOW_UPDATE_MANIFEST_URL: ${SIGNFLOW_UPDATE_MANIFEST_URL:-https://raw.githubusercontent.com/edkahall/signflow-install/main/versions.json}
   SIGNFLOW_UPDATE_BELL: ${SIGNFLOW_UPDATE_BELL:-true}
+  # Product licence: a JSON document signed by the publisher, verified LOCALLY
+  # (never a phone-home — some sites run on closed networks). Only the PUBLIC key
+  # is deployed here; the private key never leaves the publisher.
+  # ⚠️ The path MUST live on the mounted `./config` directory, not inside the
+  # container: this stack runs from the image with no source mount, so a licence
+  # written anywhere else would be silently lost on the next `up -d` — and the
+  # server would quietly fall back to "unlicensed".
+  SIGNFLOW_LICENCE_PATH: ${SIGNFLOW_LICENCE_PATH:-/etc/signflow/licence.json}
+  SIGNFLOW_LICENCE_PUBLIC_KEY: ${SIGNFLOW_LICENCE_PUBLIC_KEY:-}
   PUBLIC_WEB_URL: ${PUBLIC_WEB_URL:-}
   CORS_ORIGINS: ${CORS_ORIGINS:-'[]'}
   # Player machine tokens: rotated on reconnect, so screens never go dark
@@ -153,6 +162,11 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment: *app-env
+    volumes:
+      # Product licence: a PERSISTENT host directory. Mount the DIRECTORY, never the
+      # file itself -- Docker silently creates a directory in place of a missing
+      # bind-mounted file, which would make the licence unreadable with no clear error.
+      - ./config:/etc/signflow
     ports:
       - "127.0.0.1:8010:8000"
     depends_on:
@@ -201,6 +215,11 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment: *app-env
+    volumes:
+      # Product licence: a PERSISTENT host directory. Mount the DIRECTORY, never the
+      # file itself -- Docker silently creates a directory in place of a missing
+      # bind-mounted file, which would make the licence unreadable with no clear error.
+      - ./config:/etc/signflow
     depends_on:
       - backend
     command: celery -A app.workers.celery_app worker --loglevel=info --queues=cms_screenshot --concurrency=2
@@ -213,6 +232,11 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment: *app-env
+    volumes:
+      # Product licence: a PERSISTENT host directory. Mount the DIRECTORY, never the
+      # file itself -- Docker silently creates a directory in place of a missing
+      # bind-mounted file, which would make the licence unreadable with no clear error.
+      - ./config:/etc/signflow
     depends_on:
       - backend
     command: celery -A app.workers.celery_app beat --loglevel=info --scheduler celery.beat.PersistentScheduler

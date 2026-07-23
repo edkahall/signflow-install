@@ -1,7 +1,15 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
-  "latest": "1.0.8",
+  "latest": "1.0.9",
   "releases": [
+    {
+      "version": "1.0.9",
+      "date": "2026-07-23",
+      "notes": {
+        "en": "Product licensing: your server now reads a signed licence file, verified locally without ever contacting the publisher. A licensed server can create the platform super-admin and additional organisations. Servers that have never been licensed keep working exactly as before (a banner only, never a lock). Proof of Play no longer counts airtime played while the screen was powered off, so analytics, dashboards and advertiser reports reflect what was actually visible. Also fixes a defect that blocked all navigation after opening the user management page (present since 1.0.5).",
+        "fr": "Licence produit : votre serveur lit desormais un fichier de licence signe, verifie localement sans jamais contacter l'editeur. Un serveur licencie peut creer le super-administrateur de la plateforme et des organisations supplementaires. Les serveurs qui n'ont jamais eu de licence continuent de fonctionner exactement comme avant (un bandeau seulement, jamais de verrou). Le Proof of Play ne compte plus le temps d'antenne diffuse alors que l'ecran etait eteint : analyses, tableaux de bord et rapports annonceurs refletent ce qui a reellement ete vu. Corrige aussi un defaut qui bloquait toute navigation apres l'ouverture de la page de gestion des utilisateurs (present depuis la 1.0.5)."
+      }
+    },
     {
       "version": "1.0.8",
       "date": "2026-07-22",

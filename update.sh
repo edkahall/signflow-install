@@ -65,7 +65,7 @@ if ! docker pull "${REGISTRY}/signflow-backend:${VERSION}" >/dev/null 2>&1; then
     warn "Cannot pull ${REGISTRY}/signflow-backend:${VERSION}"
     warn "Most often this is a missing login for the CURRENT user, not a missing image."
     warn "Log in with the credentials supplied with your licence:"
-    warn "    docker login ${REGISTRY} -u signflow-client"
+    warn "    docker login ${REGISTRY} -u <your-licence-id>   # e.g. SF-2026-ACME"
     fail "Registry unreachable or version ${VERSION} does not exist."
 fi
 ok "Version ${VERSION} reachable"
