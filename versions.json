@@ -1,9 +1,9 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
-  "latest": "1.0.12",
+  "latest": "1.0.13",
   "releases": [
     {
-      "version": "1.0.12",
+      "version": "1.0.13",
       "date": "2026-07-24",
       "notes": {
         "en": "The media library now accepts .ogg audio files (plus .oga/.opus/.m4a), and the upload panel gets a button to clear finished items. Governance (Section XVIII) refined for multi-level networks: time budgets are now an absolute volume per cycle, unused delegation levers were removed, a proper day+hour form for time windows, one rule per type, and a governed program is delivered only through its node. New host-hardening helper (harden.sh: firewall + key-only SSH + fail2ban) and an optional hardening step in the installer for Internet-facing servers.",
