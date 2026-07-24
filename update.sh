@@ -34,7 +34,33 @@ ok()   { echo -e "  ${GREEN}OK${NC}   $*"; }
 warn() { echo -e "  ${YELLOW}!!${NC}   $*"; }
 fail() { echo -e "  ${RED}FAIL${NC} $*" >&2; exit 1; }
 
-[[ -n "$VERSION" ]] || fail "Missing version. Example: bash update.sh 1.0.5"
+show_help() {
+    cat <<EOF
+${CYAN}SignFlow — update an installation to a pinned version${NC}
+
+Updates an EXISTING install (run from the installation directory, e.g. /opt/signflow).
+It self-refreshes the static files (this script, docker-compose.yml, configs) from the
+public install repo, takes a database snapshot, pulls the pinned images, applies
+migrations, and reindexes the AI assistant documentation.
+
+${GREEN}USAGE${NC}
+  cd /opt/signflow && bash update.sh <version>
+
+${GREEN}EXAMPLE${NC}
+  bash update.sh 1.0.10
+
+${GREEN}ENVIRONMENT${NC}
+  SIGNFLOW_REGISTRY            image registry (default: ${REGISTRY})
+  SIGNFLOW_INSTALL_BASE_URL    source of the static files (public install repo)
+
+${GREEN}NOTES${NC}
+  A pinned version guarantees you get exactly what was validated. Find the current
+  recommended version in the update bell inside the web UI, or in versions.json.
+EOF
+}
+[[ "${VERSION}" == "-h" || "${VERSION}" == "--help" ]] && { show_help; exit 0; }
+
+[[ -n "$VERSION" ]] || fail "Missing version. Example: bash update.sh 1.0.10"
 [[ -f docker-compose.yml && -f .env ]] \
     || fail "Run this from the installation directory (/opt/signflow)."
 

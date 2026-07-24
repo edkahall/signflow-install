@@ -27,7 +27,7 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/opt/signflow"
 REGISTRY="${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}"
-VERSION="${SIGNFLOW_VERSION:-1.0.9}"
+VERSION="${SIGNFLOW_VERSION:-1.0.10}"
 
 # Owner of the configuration files: whoever ran `sudo`, so they can edit them
 # without root. Falls back to root when that account does not exist.
@@ -46,6 +46,38 @@ ok()    { echo -e "${GREEN}    OK  $*${NC}"; }
 warn()  { echo -e "${YELLOW}    !!  $*${NC}"; }
 fail()  { echo -e "${RED}    ERR $*${NC}"; exit 1; }
 info()  { echo -e "    ..  $*"; }
+
+show_help() {
+    cat <<EOF
+SignFlow CMS — Ubuntu installer
+
+Installs SignFlow from PRE-BUILT images (nothing is compiled, no source code is put
+on the machine): Docker + Compose, generated secrets, image pull, database migrations,
+object storage, health checks, systemd autostart, nginx front end, and the initial
+organisation + administrator account.
+
+USAGE
+  sudo bash install-ubuntu.sh
+
+REGISTRY CREDENTIALS (supplied with your SignFlow licence)
+  Provide them interactively, or pass them for an UNATTENDED install:
+    sudo SIGNFLOW_REGISTRY_USER=<licence_id> SIGNFLOW_REGISTRY_PASSWORD=<secret> \\
+         bash install-ubuntu.sh
+
+USEFUL ENVIRONMENT VARIABLES
+  SIGNFLOW_REGISTRY_USER / _PASSWORD   registry login (asked otherwise)
+  SIGNFLOW_VERSION                     version to install (default: ${VERSION})
+  MEDIA_DATA_PATH                      where media are stored (asked otherwise)
+  SIGNFLOW_HARDEN=yes|no               run the security hardening step unattended
+
+AFTER INSTALL
+  Web UI:            http://<server>:${NGINX_PORT}
+  Update later:      cd ${INSTALL_DIR} && bash update.sh <version>
+  Harden (public):   sudo bash harden.sh
+  Daily DB backup:   bash setup-backup.sh
+EOF
+}
+[[ "${1:-}" == "-h" || "${1:-}" == "--help" ]] && { show_help; exit 0; }
 
 # =============================================================================
 step "1/10 — Prerequisites"
@@ -192,6 +224,12 @@ if [[ -f "$SRC_DIR/update.sh" ]]; then
     chmod +x "$INSTALL_DIR/update.sh"
 else
     warn "update.sh not found next to the installer — updates will be manual"
+fi
+# harden.sh — host security baseline (firewall + key-only SSH + fail2ban). Copied so
+# it can be re-run any time; the installer offers to run it at the end.
+if [[ -f "$SRC_DIR/harden.sh" ]]; then
+    cp "$SRC_DIR/harden.sh" "$INSTALL_DIR/harden.sh"
+    chmod +x "$INSTALL_DIR/harden.sh"
 fi
 chmod +x "$INSTALL_DIR/postgres-init.sh"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
@@ -826,6 +864,24 @@ echo -e "   until then they fail with \"permission denied\" and need sudo."
 echo ""
 fi
 echo -e "   ${YELLOW}Back up ${INSTALL_DIR}/.env${NC} — it holds this installation's encryption keys."
+echo ""
+
+# ── Security hardening (firewall + key-only SSH + fail2ban) ──────────────────
+# Strongly recommended for any server reachable from the Internet (port-forward
+# or DMZ). Safe: SSH stays allowed, and password login is only disabled if a key
+# is already installed (so a password-only session is never locked out).
+if [[ -f "$INSTALL_DIR/harden.sh" ]]; then
+    DO_HARDEN="${SIGNFLOW_HARDEN:-}"
+    if [[ -z "$DO_HARDEN" ]]; then
+        read -rp "Apply the recommended security hardening now (firewall + key-only SSH + fail2ban)? [Y/n] " DO_HARDEN
+        DO_HARDEN="${DO_HARDEN:-y}"
+    fi
+    if [[ "${DO_HARDEN,,}" == "y" || "${DO_HARDEN,,}" == "yes" ]]; then
+        bash "$INSTALL_DIR/harden.sh" || warn "Hardening did not complete cleanly — review the output above."
+    else
+        echo -e "   Skipped. Run it any time: ${CYAN}cd ${INSTALL_DIR} && sudo bash harden.sh${NC}"
+    fi
+fi
 echo ""
 
 # ── Optional: automatic daily DATABASE backup to external storage ────────────

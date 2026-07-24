@@ -1,7 +1,15 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
-  "latest": "1.0.9",
+  "latest": "1.0.10",
   "releases": [
+    {
+      "version": "1.0.10",
+      "date": "2026-07-24",
+      "notes": {
+        "en": "The media library now accepts .ogg audio files (plus .oga/.opus/.m4a), and the upload panel gets a button to clear finished items. Governance (Section XVIII) refined for multi-level networks: time budgets are now an absolute volume per cycle, unused delegation levers were removed, a proper day+hour form for time windows, one rule per type, and a governed program is delivered only through its node. New host-hardening helper (harden.sh: firewall + key-only SSH + fail2ban) and an optional hardening step in the installer for Internet-facing servers.",
+        "fr": "La mediatheque accepte desormais les fichiers audio .ogg (ainsi que .oga/.opus/.m4a), et le panneau d'import gagne un bouton pour effacer les elements termines. Gouvernance (section XVIII) affinee pour les reseaux multi-niveaux : le budget temps devient un volume absolu par cycle, les leviers de delegation inutiles sont retires, un vrai formulaire jours+heures pour les plages horaires, une seule regle par type, et un programme gouverne n'est diffuse que par son noeud. Nouveau script de durcissement (harden.sh : pare-feu + SSH par cle + fail2ban) et une etape de durcissement optionnelle dans l'installeur pour les serveurs exposes."
+      }
+    },
     {
       "version": "1.0.9",
       "date": "2026-07-23",

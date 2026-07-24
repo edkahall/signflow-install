@@ -12,6 +12,23 @@
 # =============================================================================
 set -euo pipefail
 
+if [[ "${1:-}" == "-h" || "${1:-}" == "--help" ]]; then
+    cat <<'EOF'
+SignFlow — daily DATABASE backup runner
+
+Invoked by cron (installed by setup-backup.sh). Reads its destination and retention from
+~/.config/signflow-backup/db-backup.env, writes a gzip'd database dump there, then prunes
+dumps older than the retention window. DATABASE ONLY (media are not included).
+
+USAGE
+  bash signflow-db-backup.sh          # normally run by cron, not by hand
+
+SET IT UP
+  bash setup-backup.sh                # creates the config + cron entry this script uses
+EOF
+    exit 0
+fi
+
 CONF="$HOME/.config/signflow-backup/db-backup.env"
 [[ -f "$CONF" ]] || { echo "No backup config at $CONF - run setup-backup.sh first." >&2; exit 1; }
 # shellcheck disable=SC1090

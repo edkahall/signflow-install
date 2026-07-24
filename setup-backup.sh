@@ -23,9 +23,33 @@ ok()   { echo -e "  ${GREEN}OK${NC}   $*"; }
 warn() { echo -e "  ${YELLOW}!!${NC}   $*"; }
 fail() { echo -e "  ${RED}FAIL${NC} $*" >&2; exit 1; }
 
+show_help() {
+    cat <<EOF
+${CYAN}SignFlow — set up an automatic daily DATABASE backup${NC}
+
+Configures a daily gzip'd database dump to storage EXTERNAL to this server, plus a cron
+entry and retention pruning. DATABASE ONLY — media (MinIO) are a separate, larger dataset
+and are not backed up here. Re-runnable (idempotent).
+
+${GREEN}USAGE${NC} (from the installation directory, e.g. /opt/signflow)
+  bash setup-backup.sh                          # interactive
+  bash setup-backup.sh --user <account> --dir <path> [--retention <days>]
+
+${GREEN}OPTIONS${NC}
+  --user <account>    system user that owns the cron + config (default: current user)
+  --dir <path>        destination — a mounted NAS share or removable disk (asked otherwise)
+  --retention <days>  keep dumps for N days (default: 14)
+
+${GREEN}IMPORTANT${NC}
+  The destination MUST be EXTERNAL storage. A backup on the same disk as the server does
+  not survive a disk failure — the script warns if it detects that.
+EOF
+}
+
 TARGET_USER=""; BACKUP_DIR=""; RETENTION=14
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        -h|--help) show_help; exit 0 ;;
         --user) TARGET_USER="$2"; shift 2 ;;
         --dir) BACKUP_DIR="$2"; shift 2 ;;
         --retention) RETENTION="$2"; shift 2 ;;
