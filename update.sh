@@ -180,6 +180,39 @@ else
     warn "    docker compose exec -T backend python3 -c \"from app.services.doc_index import index_all_docs; print(index_all_docs())\""
 fi
 
+# ── 4b. Player update bundles ────────────────────────────────────────────────
+# Without this, the player version catalogue stays EMPTY on your server: you could
+# update SignFlow itself but none of your players, security fixes included. The
+# bundles travel as an OCI image in the same registry (same credentials, read-only)
+# and are seeded into your own storage, so players download them from YOUR server.
+# Best-effort by design: a missing bundles image must never fail an update.
+step "Seeding player update bundles"
+if docker pull "${REGISTRY}/signflow-player-bundles:${VERSION}" >/dev/null 2>&1; then
+    BID=$(docker create "${REGISTRY}/signflow-player-bundles:${VERSION}" 2>/dev/null || true)
+    if [[ -n "$BID" ]]; then
+        rm -rf /tmp/sf-bundles && mkdir -p /tmp/sf-bundles
+        docker cp "$BID:/bundles/." /tmp/sf-bundles/ >/dev/null 2>&1 || true
+        docker rm -f "$BID" >/dev/null 2>&1 || true
+        CID=$(docker compose ps -q backend)
+        if [[ -n "$CID" ]]; then
+            docker exec "$CID" rm -rf /tmp/sf-bundles >/dev/null 2>&1 || true
+            docker cp /tmp/sf-bundles "$CID:/tmp/sf-bundles" >/dev/null 2>&1 || true
+            SEED=$(docker compose exec -T backend python3 scripts/seed_player_bundles.py \
+                       /tmp/sf-bundles 2>&1 | tail -1 | tr -d '\r')
+            docker exec "$CID" rm -rf /tmp/sf-bundles >/dev/null 2>&1 || true
+            [[ -n "$SEED" ]] && ok "$SEED" || warn "Bundles not seeded — players can still be updated by manual import."
+        else
+            warn "Backend container not found — bundles not seeded."
+        fi
+        rm -rf /tmp/sf-bundles
+    else
+        warn "Could not open the bundles image — skipped."
+    fi
+else
+    # No image published for this version: not an error (older releases have none).
+    warn "No player bundles published for ${VERSION} — player catalogue left untouched."
+fi
+
 # ── 5. Did everything actually come back up? ─────────────────────────────────
 # A service that stays down is worse than one that crashes: nothing reports it.
 step "Checking services"

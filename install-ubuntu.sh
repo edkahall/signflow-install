@@ -594,6 +594,35 @@ else
     warn "    docker compose exec -T backend python3 -c \"from app.services.doc_index import index_all_docs; print(index_all_docs())\""
 fi
 
+# ── Player update bundles ────────────────────────────────────────────────────
+# Without this, a fresh install ships an EMPTY player version catalogue: the CMS
+# updates itself but none of its players ever can, security fixes included (found
+# on 2026-07-20, still true on 2026-07-27). The bundles travel as an OCI image in
+# the same registry (same credentials, read-only) and are seeded into this
+# server's own storage: players then download them from THEIR server, over the
+# relative URL the catalogue stores. Best-effort: never fails an installation.
+info "Seeding player update bundles..."
+if docker pull "${REGISTRY}/signflow-player-bundles:${VERSION}" >/dev/null 2>&1; then
+    BID=$(docker create "${REGISTRY}/signflow-player-bundles:${VERSION}" 2>/dev/null || true)
+    if [[ -n "$BID" ]]; then
+        rm -rf /tmp/sf-bundles && mkdir -p /tmp/sf-bundles
+        docker cp "$BID:/bundles/." /tmp/sf-bundles/ >/dev/null 2>&1 || true
+        docker rm -f "$BID" >/dev/null 2>&1 || true
+        BCID=$(docker compose ps -q backend)
+        if [[ -n "$BCID" ]]; then
+            docker cp /tmp/sf-bundles "$BCID:/tmp/sf-bundles" >/dev/null 2>&1 || true
+            SEED=$(docker compose exec -T backend python3 scripts/seed_player_bundles.py \
+                       /tmp/sf-bundles 2>&1 | tail -1 | tr -d '\r')
+            docker exec "$BCID" rm -rf /tmp/sf-bundles >/dev/null 2>&1 || true
+            [[ -n "$SEED" ]] && ok "Player bundles: ${SEED}" \
+                || warn "Player bundles not seeded — import them later from Settings > Updates."
+        fi
+        rm -rf /tmp/sf-bundles
+    fi
+else
+    warn "No player bundles published for ${VERSION} — the player catalogue starts empty."
+fi
+
 # =============================================================================
 step "7/10 — Health checks"
 # =============================================================================
