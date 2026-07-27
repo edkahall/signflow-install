@@ -1,6 +1,18 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
+  "_canary_comment": "CANARY : la cloche des clients (update_check.py) ne lit QUE 'latest' + 'releases'. 'canary' (version en cours de validation, images deja poussees au registre) et 'pending' (entree de release en attente de promotion, notes deja redigees) sont donc INVISIBLES des clients — aucune cloche ne sonne. Flux : bump-version.py stage -> 'canary' + 'pending' -> sfctl canary (publie les images) -> sfctl validate-canary (Lenovo) -> bump-version.py promote (pending->releases, canary->latest) -> sfctl promote (les cloches sonnent). Un client ne voit donc QUE des versions deja validees sur un vrai serveur.",
   "latest": "1.0.13",
+  "canary": "1.0.14",
+  "pending": [
+    {
+      "version": "1.0.14",
+      "date": "2026-07-27",
+      "notes": {
+        "en": "Governance (Section XVIII) becomes usable end to end for multi-site networks. Playlists and media can now belong to a governance node, with optional moderation: a local team submits, the level above approves, and approval is what publishes. The node screen has been rebuilt (tree, settings and compiled program side by side, screen perimeter picked on a map, site groups supported), rules can be delegated family by family, caps are inherited, a maximum duration per content prevents one long file from taking the whole loop, and the screen now shows how often each content is aired. A governed program's own targets now restrict its node perimeter, so one node can drive only part of its screens (entrance versus counter), with a warning when the selection splits a LAN-synchronised group. Also fixed: playlist rotation settings now follow the draft/publish cycle like the rest of the playlist, numeric fields save without having to leave them, an imported player version that silently targeted no player at all, and screen-to-screen LAN synchronisation under a governed program (update your players to benefit from it).",
+        "fr": "La gouvernance (section XVIII) devient utilisable de bout en bout pour les reseaux multi-sites. Les playlists et les medias peuvent desormais appartenir a un noeud de gouvernance, avec moderation optionnelle : une equipe locale soumet, le niveau superieur valide, et c'est la validation qui publie. L'ecran du noeud a ete refondu (arbre, reglages et programme compile cote a cote, perimetre d'ecrans choisi sur une carte, groupes de sites acceptes), les regles se deleguent famille par famille, les plafonds s'heritent, une duree maximale par contenu empeche un fichier trop long de monopoliser la boucle, et l'ecran affiche le taux de passage de chaque contenu. Les cibles d'un programme gouverne restreignent maintenant le perimetre de son noeud : un meme noeud peut ne piloter qu'une partie de ses ecrans (entree contre rayon), avec un avertissement si la selection coupe un groupe synchronise en LAN. Corrige aussi : les reglages de rotation d'une playlist suivent le cycle brouillon/publication comme le reste de la playlist, les champs numeriques s'enregistrent sans avoir a les quitter, une version de player importee qui ne ciblait aucun player en silence, et la synchronisation LAN entre ecrans sous un programme gouverne (mettez vos players a jour pour en beneficier)."
+      }
+    }
+  ],
   "releases": [
     {
       "version": "1.0.13",
