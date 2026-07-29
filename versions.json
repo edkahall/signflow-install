@@ -2,8 +2,18 @@
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
   "_canary_comment": "CANARY : la cloche des clients (update_check.py) ne lit QUE 'latest' + 'releases'. 'canary' (version en cours de validation, images deja poussees au registre) et 'pending' (entree de release en attente de promotion, notes deja redigees) sont donc INVISIBLES des clients — aucune cloche ne sonne. Flux : bump-version.py stage -> 'canary' + 'pending' -> sfctl canary (publie les images) -> sfctl validate-canary (Lenovo) -> bump-version.py promote (pending->releases, canary->latest) -> sfctl promote (les cloches sonnent). Un client ne voit donc QUE des versions deja validees sur un vrai serveur.",
   "latest": "1.0.18",
-  "canary": null,
-  "pending": [],
+  "canary": "1.0.19",
+  "pending": [
+    {
+      "version": "1.0.19",
+      "date": "2026-07-29",
+      "security": true,
+      "notes": {
+        "en": "Audio baskets: you can now listen to a basket or a single track straight from the CMS, and pick audio content through a real search drawer (server-side search, folders, multi-select, preview before adding). Security and correctness fixes in the same module: audio events are now strictly scoped to your organisation, mandatory baskets can no longer be switched off or re-balanced by a store operator, deleting a basket now names the schedules and events that use it instead of silently removing it from them, every change is journalled, and players are refreshed immediately. Spanish, Portuguese and German translations completed.",
+        "fr": "Paniers audio : on peut desormais ecouter un panier ou un morceau depuis le CMS, et choisir ses contenus audio dans un vrai tiroir de recherche (recherche cote serveur, dossiers, multi-selection, pre-ecoute avant ajout). Corrections de securite et de coherence dans le meme module : les evenements audio sont strictement cantonnes a votre organisation, un panier obligatoire ne peut plus etre coupe ni re-equilibre par un operateur magasin, supprimer un panier NOMME desormais les programmes et evenements qui l'utilisent au lieu de l'en retirer en silence, chaque modification est tracee, et les ecrans sont resynchronises immediatement. Traductions espagnole, portugaise et allemande completees."
+      }
+    }
+  ],
   "releases": [
     {
       "version": "1.0.18",
