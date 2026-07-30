@@ -32,6 +32,13 @@ x-logging: &default-logging
 # SMTP_* had only been declared on the backend.
 x-app-env: &app-env
   DATABASE_URL: postgresql+asyncpg://${POSTGRES_USER:-signflow}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is missing}@postgres:5432/${POSTGRES_DB:-signflow}
+  # RLS: the API must connect as signflow_app (non-owner, subject to row-level
+  # security), NEVER as the superuser above. This line was MISSING until 2026-07-30:
+  # the backend silently fell back to the superuser URL (the in-code fallback only
+  # rewrites the dev-style "signflow:signflow@" credentials), which disabled every
+  # row-level-security policy on client installs. The role and its password have
+  # always been provisioned by postgres-init.sh — only this line was absent.
+  DATABASE_APP_URL: postgresql+asyncpg://signflow_app:${POSTGRES_APP_PASSWORD:-signflow_app_secret}@postgres:5432/${POSTGRES_DB:-signflow}
   DATABASE_WORKER_URL: postgresql+asyncpg://signflow_worker:${POSTGRES_WORKER_PASSWORD:-signflow_worker_secret}@postgres:5432/${POSTGRES_DB:-signflow}
   REDIS_URL: redis://redis:6379/0
   MINIO_ENDPOINT: minio:9000
