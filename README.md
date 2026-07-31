@@ -125,6 +125,11 @@ changed, whether the update is a security fix, and the exact command to run — 
 you never have to watch for releases yourself. (A server built from source shows
 no bell: there is no pinned version to compare.)
 
+The server probes the release manifest every **15 minutes**, so the bell can lag
+a new release by up to that long — including security releases. If you have been
+told a version exists and the bell has not appeared yet, that is the reason;
+`bash update.sh <version>` works immediately regardless of the bell.
+
 ```bash
 cd /opt/signflow
 bash update.sh <version>     # the version shown by the bell, e.g. 1.0.9
