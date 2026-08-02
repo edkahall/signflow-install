@@ -188,6 +188,19 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment: *app-env
+    # ⚠️ CHAQUE PLAYER TIENT UNE WEBSOCKET OUVERTE EN PERMANENCE — un écran = un
+    # descripteur de fichier, 24 h/24. Sans cette limite explicite, le conteneur
+    # hérite du défaut Docker (1024) et le parc plafonne à ~500 écrans QUEL QUE SOIT
+    # LE MATÉRIEL. Mesuré sur le banc le 2026-08-02 : à 507 sockets le backend
+    # rejette avec « [Errno 24] Too many open files », nginx renvoie 502 aux
+    # suivants — alors que la charge processeur n'était qu'à 0,43 sur 4 vCPU (11 %).
+    # Ce n'était donc pas un mur matériel mais un plafond de configuration, et il
+    # tombait au beau milieu des paliers « 500-1000 » et « 1000+ » que notre propre
+    # guide de dimensionnement propose.
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
     volumes:
       # Product licence: a PERSISTENT host directory. Mount the DIRECTORY, never the
       # file itself -- Docker silently creates a directory in place of a missing

@@ -662,6 +662,40 @@ step "9/10 — Network access (nginx)"
 
 command -v nginx >/dev/null 2>&1 || { info "Installing nginx..."; apt-get install -y -qq nginx >/dev/null; }
 
+# ── Capacity: every screen holds a WebSocket, permanently ────────────────────
+# A player is not a visitor who comes and goes: it keeps one WebSocket open 24/7.
+# nginx proxies it, and a proxied WebSocket costs TWO connections — one to the
+# client, one to the upstream. Ubuntu ships `worker_connections 768`, so with the
+# usual 4 workers the fleet hits a wall at roughly 1500 screens — measured on the
+# bench, 2026-08-02: 164 refusals at 1600 while the machine was only at 30% CPU.
+# That ceiling fell right in the middle of the 500-1000 and 1000+ tiers our own
+# sizing guide offers, and it had nothing to do with the hardware.
+#
+# ⚠️ This CANNOT be done from conf.d/: `worker_connections` lives in the `events`
+# block, while conf.d is included inside `http`. The main file has to be patched,
+# so we do it idempotently and keep a backup.
+NGINX_CONF=/etc/nginx/nginx.conf
+if [[ -f "$NGINX_CONF" ]]; then
+    cp -n "$NGINX_CONF" "${NGINX_CONF}.signflow.bak" 2>/dev/null || true
+    # Raise the per-worker file-descriptor ceiling. The master runs as root, so it
+    # can lift the soft limit up to the hard one; without this, worker_connections
+    # would be promised and not honoured.
+    if grep -qE '^\s*worker_rlimit_nofile' "$NGINX_CONF"; then
+        sed -i -E 's/^\s*worker_rlimit_nofile.*/worker_rlimit_nofile 65535;/' "$NGINX_CONF"
+    else
+        sed -i -E '/^\s*worker_processes/a worker_rlimit_nofile 65535;' "$NGINX_CONF"
+    fi
+    if grep -qE '^\s*worker_connections' "$NGINX_CONF"; then
+        sed -i -E 's/^(\s*)worker_connections.*/\1worker_connections 8192;/' "$NGINX_CONF"
+    fi
+    if nginx -t >/dev/null 2>&1; then
+        ok "nginx tuned for a large fleet (8192 connections/worker)"
+    else
+        warn "nginx config test failed after tuning — restoring the original."
+        cp "${NGINX_CONF}.signflow.bak" "$NGINX_CONF"
+    fi
+fi
+
 cat > /etc/nginx/sites-available/signflow << NGINXEOF
 upstream signflow_backend  { server 127.0.0.1:${BACKEND_PORT};  keepalive 32; }
 upstream signflow_frontend { server 127.0.0.1:${FRONTEND_PORT}; keepalive 32; }
