@@ -55,7 +55,14 @@ warn() { echo -e "${YELLOW}    !!  $*${NC}"; }
 
 # Active SSH port (default 22) — read from the effective config so we never
 # lock ourselves out on a non-standard port.
-SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{print $2; exit}')"
+# ⚠️ NEVER let the reader of this pipe exit early (`awk ... exit`, `grep -m1`,
+# `head -1`): it closes the pipe under `sshd -T`, which then dies of SIGPIPE.
+# With `set -o pipefail` the whole pipeline reports 141 and `set -e` aborts the
+# script — so hardening silently did nothing while the installer only printed a
+# warning and still exited 0. It is a RACE (it succeeds whenever sshd finishes
+# writing first), which is why it worked on some machines and not others.
+# Found on the install bench, 2026-08-02. Read everything, keep the last match.
+SSH_PORT="$(sshd -T 2>/dev/null | awk '/^port /{p=$2} END{if (p) print p}')"
 SSH_PORT="${SSH_PORT:-22}"
 
 # -----------------------------------------------------------------------------
@@ -83,8 +90,18 @@ say "2/5 — Docker-published ports (UFW does NOT filter these)"
 # is served through a TLS reverse proxy (…:9443), raw 9000 must be bound to
 # loopback so it is not reachable from the Internet.
 if [[ -f "${INSTALL_DIR}/.env" ]]; then
-    PUB_EP="$(grep -E '^MINIO_PUBLIC_ENDPOINT=' "${INSTALL_DIR}/.env" | head -1 | cut -d= -f2-)"
-    CUR_BIND="$(grep -E '^MINIO_BIND=' "${INSTALL_DIR}/.env" | head -1 | cut -d= -f2-)"
+    # ⚠️ `grep` returns 1 when a key is simply ABSENT — which is the normal case
+    # for MINIO_BIND on a fresh install. Under `set -euo pipefail` that aborted
+    # hardening at step 2/5, leaving fail2ban and key-only SSH unconfigured while
+    # the installer reported only a warning. Read the value, never let its
+    # absence be an error. (`head -1` also closes the pipe early, so the same
+    # SIGPIPE trap as step 1 applies — awk keeps the first match instead.)
+    env_value() {  # env_value <key> — empty when the key is not there
+        awk -F= -v k="$1" '$1 == k && !seen {seen=1; sub(/^[^=]*=/, ""); print}' \
+            "${INSTALL_DIR}/.env" 2>/dev/null || true
+    }
+    PUB_EP="$(env_value MINIO_PUBLIC_ENDPOINT)"
+    CUR_BIND="$(env_value MINIO_BIND)"
     if [[ -n "$PUB_EP" && "$PUB_EP" != *:9000* ]]; then
         # Media is proxied elsewhere → 9000 does not need to face the network.
         if [[ "$CUR_BIND" != "127.0.0.1" ]]; then

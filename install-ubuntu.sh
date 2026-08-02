@@ -47,6 +47,30 @@ warn()  { echo -e "${YELLOW}    !!  $*${NC}"; }
 fail()  { echo -e "${RED}    ERR $*${NC}"; exit 1; }
 info()  { echo -e "    ..  $*"; }
 
+# ── Asking questions safely ──────────────────────────────────────────────────
+# Every prompt in this installer goes through ask(). Without a terminal — a
+# scripted install, cloud-init, CI — `read` returns EOF immediately, and under
+# `set -euo pipefail` that KILLS the script. That is what made the documented
+# "unattended install" impossible: it died at the first prompt (the media path),
+# after installing Docker but before pulling a single image, and returned 1.
+# Measured on a bare install bench, 2026-08-02.
+#
+# With no terminal we therefore take the default and SAY SO, rather than stop.
+NONINTERACTIVE=0
+[[ -t 0 ]] || NONINTERACTIVE=1
+
+# ask <variable> <prompt> [default]
+ask() {
+    local __var="$1" __prompt="$2" __default="${3-}" __answer=""
+    if (( NONINTERACTIVE )); then
+        printf -v "$__var" '%s' "$__default"
+        info "$__prompt[${__default:-empty}] (no terminal — default used)"
+        return 0
+    fi
+    read -rp "$__prompt" __answer || __answer=""
+    printf -v "$__var" '%s' "${__answer:-$__default}"
+}
+
 show_help() {
     cat <<EOF
 SignFlow CMS — Ubuntu installer
@@ -298,8 +322,7 @@ if [[ -z "${MEDIA_DATA_PATH:-}" ]]; then
     echo ""
     info "Where should MEDIA be stored? (videos, images — this is what grows)"
     echo "    Leave empty for the default. Point it at a large disk if you have one."
-    read -rp "    Path [/var/lib/signflow/media]: " MEDIA_DATA_PATH
-    MEDIA_DATA_PATH="${MEDIA_DATA_PATH:-/var/lib/signflow/media}"
+    ask MEDIA_DATA_PATH "    Path [/var/lib/signflow/media]: " "/var/lib/signflow/media"
 fi
 
 [[ "$MEDIA_DATA_PATH" = /* ]] || fail "Media path must be absolute: '${MEDIA_DATA_PATH}'"
@@ -320,7 +343,9 @@ case "$MEDIA_FSTYPE" in
         warn "MinIO needs POSIX semantics that file shares do not guarantee —"
         warn "expect stalls and possible corruption. Prefer a local disk, an"
         warn "iSCSI block device, or point SignFlow at an external S3 endpoint."
-        read -rp "    Use it anyway? [y/N] " a
+        # No terminal: default to "no". Silently accepting a share that MinIO
+        # cannot use reliably would trade a clear stop for data corruption later.
+        ask a "    Use it anyway? [y/N] " "n"
         [[ "${a,,}" == "y" ]] || fail "Aborted — choose a local path."
         ;;
 esac
@@ -410,7 +435,7 @@ ERP_SSO_ENABLED=false
 # no phone-home). Supplied with your licence. Leave empty and the server simply
 # runs "unlicensed": nothing is restricted, and playback is never affected.
 # The licence file itself goes to ./config/licence.json (mounted into the stack).
-SIGNFLOW_LICENCE_PUBLIC_KEY=${LICENCE_PUBLIC_KEY}
+SIGNFLOW_LICENCE_PUBLIC_KEY=${LICENCE_PUBLIC_KEY:-}
 EOF
     chmod 600 .env
     chown "$SERVICE_USER:$SERVICE_USER" .env
@@ -422,6 +447,9 @@ step "4/10 — Downloading images"
 # =============================================================================
 
 if [[ -z "${SIGNFLOW_REGISTRY_USER:-}" ]]; then
+    # These two have no sensible default: without them nothing can be downloaded.
+    # Say so plainly instead of dying on an unanswerable prompt.
+    (( NONINTERACTIVE )) && fail "SIGNFLOW_REGISTRY_USER and SIGNFLOW_REGISTRY_PASSWORD are required when there is no terminal. They come with your licence."
     echo ""
     info "Image registry credentials (supplied with your SignFlow licence)"
     read -rp "    Username: " SIGNFLOW_REGISTRY_USER
@@ -439,12 +467,13 @@ chown "$SERVICE_USER:$SERVICE_USER" config
 if [[ -z "${LICENCE_PUBLIC_KEY:-}" ]]; then
     echo ""
     info "Licence public key (supplied with your licence — press Enter to skip)"
-    read -rp "    Public key: " LICENCE_PUBLIC_KEY
+    ask LICENCE_PUBLIC_KEY "    Public key: "
 fi
 if [[ -n "${LICENCE_PUBLIC_KEY:-}" && ! -f config/licence.json ]]; then
     echo ""
     info "Path to your licence file (press Enter to drop it in later)"
-    read -rp "    licence.json: " LICENCE_FILE
+    # LICENCE_FILE may also be passed as an environment variable (unattended).
+    ask LICENCE_FILE "    licence.json: " "${LICENCE_FILE:-}"
     if [[ -n "${LICENCE_FILE:-}" ]]; then
         if [[ -f "$LICENCE_FILE" ]]; then
             # The server reads the file as `utf-8-sig` and tolerates a BOM, but we
@@ -458,6 +487,28 @@ if [[ -n "${LICENCE_PUBLIC_KEY:-}" && ! -f config/licence.json ]]; then
     fi
 fi
 
+# The .env is written at step 3, BEFORE the question above is asked — so a key
+# typed here would never reach the server. Sync it now.
+#
+# 🔴 Same ordering, worse symptom, until 2026-08-02: the .env template read
+# `${LICENCE_PUBLIC_KEY}` with no default, so under `set -u` ANY install that did
+# not pass the variable in the environment died at step 3/10 with
+# "unbound variable" — interactive ones included, since the question comes later.
+# Present in every published version since 1.0.9 (2026-07-23); found by running
+# the installer on a bare machine, never by reading it.
+if [[ -n "${LICENCE_PUBLIC_KEY:-}" ]]; then
+    # ⚠️ NOT with `sed`: the key is a single line containing literal `\n`
+    # sequences, and sed turns those into REAL newlines in its replacement text.
+    # The value then spans three lines and Compose refuses the file with
+    # "key cannot contain a space". printf writes it verbatim.
+    # `cat > .env` rewrites in place, so mode 600 and ownership are preserved.
+    _envtmp="$(mktemp)"
+    grep -v '^SIGNFLOW_LICENCE_PUBLIC_KEY=' .env > "$_envtmp" || true
+    printf 'SIGNFLOW_LICENCE_PUBLIC_KEY=%s\n' "$LICENCE_PUBLIC_KEY" >> "$_envtmp"
+    cat "$_envtmp" > .env
+    rm -f "$_envtmp"
+fi
+
 # ── Organisation name ────────────────────────────────────────────────────────
 # The organisation is what the customer sees at the top of the interface, in
 # report headers and in the emails SignFlow sends. Left unasked it silently
@@ -466,8 +517,7 @@ fi
 if [[ -z "${ORG_NAME:-}" ]]; then
     echo ""
     info "Name of your organisation (shown in the interface and on reports)"
-    read -rp "    Organisation [SignFlow]: " ORG_NAME
-    ORG_NAME="${ORG_NAME:-SignFlow}"
+    ask ORG_NAME "    Organisation [SignFlow]: " "SignFlow"
 fi
 
 # The slug identifies the organisation in URLs and generated identifiers, so it
@@ -493,8 +543,7 @@ info "Organisation: ${ORG_NAME} (identifier: ${ORG_SLUG})"
 if [[ -z "${ADMIN_EMAIL:-}" ]]; then
     echo ""
     info "Email address for the administrator account"
-    read -rp "    Email [admin@signflow.io]: " ADMIN_EMAIL
-    ADMIN_EMAIL="${ADMIN_EMAIL:-admin@signflow.io}"
+    ask ADMIN_EMAIL "    Email [admin@signflow.io]: " "admin@signflow.io"
 fi
 
 # ⚠️ Reserved top-level domains (.local, .test, .invalid…) are REJECTED by the
@@ -902,8 +951,7 @@ echo ""
 if [[ -f "$INSTALL_DIR/harden.sh" ]]; then
     DO_HARDEN="${SIGNFLOW_HARDEN:-}"
     if [[ -z "$DO_HARDEN" ]]; then
-        read -rp "Apply the recommended security hardening now (firewall + key-only SSH + fail2ban)? [Y/n] " DO_HARDEN
-        DO_HARDEN="${DO_HARDEN:-y}"
+        ask DO_HARDEN "Apply the recommended security hardening now (firewall + key-only SSH + fail2ban)? [Y/n] " "y"
     fi
     if [[ "${DO_HARDEN,,}" == "y" || "${DO_HARDEN,,}" == "yes" ]]; then
         bash "$INSTALL_DIR/harden.sh" || warn "Hardening did not complete cleanly — review the output above."
@@ -914,10 +962,17 @@ fi
 echo ""
 
 # ── Optional: automatic daily DATABASE backup to external storage ────────────
-read -rp "Set up an automatic daily DATABASE backup now? (requires storage EXTERNAL to this server) [y/N] " SETUP_BAK
+# Unattended: set SIGNFLOW_BACKUP_DIR to configure it, leave it unset to skip.
+# This was the LAST unguarded prompt: it turned a fully successful unattended
+# install into exit code 1, which any automation reads as a failure.
+if [[ -n "${SIGNFLOW_BACKUP_DIR:-}" ]]; then
+    SETUP_BAK="y"
+else
+    ask SETUP_BAK "Set up an automatic daily DATABASE backup now? (requires storage EXTERNAL to this server) [y/N] " "n"
+fi
 if [[ "${SETUP_BAK,,}" == "y" ]]; then
-    read -rp "  Backup directory (mounted NAS share or external disk, e.g. /mnt/nas/signflow): " BAK_DIR
-    read -rp "  Keep how many days? [14]: " BAK_RET; BAK_RET=${BAK_RET:-14}
+    ask BAK_DIR "  Backup directory (mounted NAS share or external disk, e.g. /mnt/nas/signflow): " "${SIGNFLOW_BACKUP_DIR:-}"
+    ask BAK_RET "  Keep how many days? [14]: " "${SIGNFLOW_BACKUP_RETENTION:-14}"
     if [[ -z "$BAK_DIR" ]] || ! ( cd "$INSTALL_DIR" && bash setup-backup.sh --user "$SERVICE_USER" --dir "$BAK_DIR" --retention "${BAK_RET:-14}" ); then
         echo -e "   ${YELLOW}Backup not configured.${NC} Set it up later: cd ${INSTALL_DIR} && bash setup-backup.sh"
     fi

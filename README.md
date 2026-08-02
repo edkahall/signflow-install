@@ -66,9 +66,39 @@ enrolment key** are displayed. Write all three down — they are never shown aga
 
 ### Unattended install
 
+Every question the installer asks can be answered up front with an environment
+variable. Anything left unset takes its default, so a scripted install never
+stops to wait for input:
+
 ```bash
-sudo SIGNFLOW_REGISTRY_USER=... SIGNFLOW_REGISTRY_PASSWORD=... bash install-ubuntu.sh
+sudo SIGNFLOW_REGISTRY_USER=SF-2026-ACME \
+     SIGNFLOW_REGISTRY_PASSWORD=... \
+     ORG_NAME="Acme Retail" \
+     ADMIN_EMAIL=admin@acme.com \
+     MEDIA_DATA_PATH=/mnt/storage/signflow-media \
+     SIGNFLOW_HARDEN=y \
+     bash install-ubuntu.sh
 ```
+
+| Variable | Default | What it answers |
+|---|---|---|
+| `SIGNFLOW_REGISTRY_USER` | — **required** | Registry login (your licence id) |
+| `SIGNFLOW_REGISTRY_PASSWORD` | — **required** | Registry password |
+| `ORG_NAME` | `SignFlow` | Organisation shown in the interface and on reports |
+| `ADMIN_EMAIL` | `admin@signflow.io` | Administrator account (a **real** domain) |
+| `MEDIA_DATA_PATH` | `/var/lib/signflow/media` | Where media are stored |
+| `LICENCE_PUBLIC_KEY` | *(none)* | Publisher public key, supplied with your licence |
+| `LICENCE_FILE` | *(none)* | Path to your `licence.json` |
+| `SIGNFLOW_HARDEN` | `y` | Firewall + key-only SSH + fail2ban |
+| `SIGNFLOW_BACKUP_DIR` | *(none — skipped)* | Daily database backup target |
+| `SIGNFLOW_BACKUP_RETENTION` | `14` | Days of backups to keep |
+
+The two registry variables are the only ones with no usable default: without a
+terminal to ask, the installer stops immediately and says so, rather than
+failing later with an unrelated error.
+
+> The administrator password and two-factor key are printed at the end as
+> usual — capture the output, they are shown only once.
 
 ---
 
