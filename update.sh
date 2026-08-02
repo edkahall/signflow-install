@@ -125,7 +125,14 @@ refresh_file() {
     mv "${f}.new" "$f"
     ok "${f} updated"
 }
-for f in docker-compose.yml litellm-config.yaml postgres-init.sh setup-backup.sh signflow-db-backup.sh; do refresh_file "$f"; done
+# ⚠️ Les OUTILS que l'exploitant lance à la main (harden.sh, setup-gpu.sh) doivent être
+# rafraîchis eux aussi : ils sont livrés une fois à l'installation et, sans ça, un correctif
+# ne les atteint JAMAIS sur un serveur déjà installé. Vécu le 2026-08-02 : la correction du
+# durcissement (SIGPIPE qui le faisait échouer en silence) ne serait jamais arrivée chez un
+# client existant, et setup-gpu.sh — créé le jour même — n'y serait jamais apparu du tout.
+# Même angle mort que la KB non réindexée et que l'auto-rafraîchissement de ce script.
+for f in docker-compose.yml litellm-config.yaml postgres-init.sh setup-backup.sh \
+         signflow-db-backup.sh harden.sh setup-gpu.sh; do refresh_file "$f"; done
 
 # ── 3. Images, containers, schema ────────────────────────────────────────────
 step "Downloading images"
