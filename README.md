@@ -222,8 +222,34 @@ again during the health checks.
 > recover. NVIDIA acceleration is enabled **only if `nvidia-smi` already answers** —
 > the card being present is not enough, the driver has to be loaded and healthy.
 
-The GPU wiring lives in `/opt/signflow/docker-compose.override.yml`. **Delete that
-file and restart to go back to CPU encoding** — useful if you suspect the GPU.
+### Adding — or removing — a GPU later
+
+Fitting a card months after the install is a supported path. Install your
+vendor's driver first, until `nvidia-smi` answers, then:
+
+```bash
+cd /opt/signflow
+sudo bash setup-gpu.sh            # detect, wire, restart, and verify
+sudo bash setup-gpu.sh --status   # what the worker can really use
+sudo bash setup-gpu.sh --off      # back to CPU encoding
+```
+
+> ⚠️ **This script never installs a GPU driver**, by design. Installing a
+> proprietary driver on a server that is not ours can break the display stack and
+> require a reboot to recover. If no driver answers, the script says so and
+> changes nothing.
+
+> ⚠️ Enabling NVIDIA support restarts the Docker daemon: running containers bounce
+> for a few seconds. Screens are not affected — players keep playing their cached
+> content and reconnect on their own.
+
+The script ends by asking the worker, **inside its own container**, which encoders
+it can really use — so it cannot report a success it did not achieve. Passing a
+device through is not proof that it works.
+
+The wiring itself lives in `/opt/signflow/docker-compose.override.yml`. `--off`
+moves it aside rather than deleting it, and refuses to touch an override you wrote
+yourself.
 
 SignFlow does not blindly trust the hardware: it *tests* each encoder (NVENC,
 QuickSync, VAAPI) before using it and falls back to CPU on its own. So a GPU that
