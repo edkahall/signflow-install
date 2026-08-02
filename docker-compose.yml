@@ -104,11 +104,27 @@ x-app-env: &app-env
   CMS_TELEGRAM_BOT_TOKEN: ${CMS_TELEGRAM_BOT_TOKEN:-}
   CMS_TELEGRAM_WEBHOOK_SECRET: ${CMS_TELEGRAM_WEBHOOK_SECRET:-}
 
+# ── Why the third-party images are pinned by digest ───────────────────────────
+# `update.sh` runs `docker compose pull`. With floating tags (`latest`,
+# `main-stable`, or a major-only tag like `pg16`), a routine SignFlow update also
+# dragged in whatever MinIO, Ollama, LiteLLM, PostgreSQL or Redis happened to be
+# newest that day — with no decision and no trace. Two servers installed a month
+# apart were then not the same product, and an incident could not be reproduced.
+# That is exactly what the README tells the customer NOT to do, and the rule used
+# to stop at the edge of our own images.
+#
+# A digest is the only truly immutable reference; the tag is kept beside it for
+# readability. These digests capture what was ACTUALLY in service on 2026-08-02,
+# so pinning changed nothing at the time it was introduced.
+#
+# ⚠️ To move one of them: bump it deliberately in a release, never in place — and
+# for PostgreSQL and MinIO check the upgrade notes first, they hold live data.
 services:
 
   # ── Database ────────────────────────────────────────────────────────────────
   postgres:
-    image: pgvector/pgvector:pg16
+    # PostgreSQL 16.14 + pgvector
+    image: pgvector/pgvector:pg16@sha256:a36250871de0833b8757561c72f2477ef1ddd1101afa4e617fb552e0de514c6b
     restart: unless-stopped
     logging: *default-logging
     environment:
@@ -130,7 +146,8 @@ services:
 
   # ── Redis ───────────────────────────────────────────────────────────────────
   redis:
-    image: redis:7-alpine
+    # Redis 7.4.10
+    image: redis:7-alpine@sha256:e7723ff73d963f5cc6d9c4643ea3d989527a402a319239054e9472a7fb9219a2
     restart: unless-stopped
     logging: *default-logging
     command: redis-server --appendonly yes
@@ -144,7 +161,9 @@ services:
 
   # ── Object storage ──────────────────────────────────────────────────────────
   minio:
-    image: minio/minio:latest
+    # RELEASE.2025-09-07T16-13-09Z — holds ALL the customer's media: never move
+    # this one without reading MinIO's upgrade notes.
+    image: minio/minio:latest@sha256:14cea493d9a34af32f524e538b8346cf79f3321eff8e708c1e2960462bd8936e
     restart: unless-stopped
     logging: *default-logging
     command: server /data --console-address ":9001"
@@ -279,7 +298,8 @@ services:
   # and kept in the volume. Remove this service and litellm if you do not use the
   # AI assistant.
   ollama:
-    image: ollama/ollama:latest
+    # Ollama 0.32.5
+    image: ollama/ollama:latest@sha256:4dea9fb511947e24a84237bb636b0203abcb2ff0d3fbc7b4ff865deb91362131
     restart: unless-stopped
     logging: *default-logging
     entrypoint: ["/bin/sh", "-c", "ollama serve & sleep 8 && ollama pull nomic-embed-text && wait"]
@@ -294,7 +314,8 @@ services:
 
   # ── LLM proxy ───────────────────────────────────────────────────────────────
   litellm:
-    image: ghcr.io/berriai/litellm:main-stable
+    # `main-stable` is a MOVING tag — it advances with every upstream build.
+    image: ghcr.io/berriai/litellm:main-stable@sha256:af806882b7a6ced41658db5b6a7e98ed7b9b51d03b935e0417bf1c8552d688af
     restart: unless-stopped
     logging: *default-logging
     command: --config /app/config.yaml --port 4000
