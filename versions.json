@@ -1,9 +1,10 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
   "_canary_comment": "CANARY : la cloche des clients (update_check.py) ne lit QUE 'latest' + 'releases'. 'canary' (version en cours de validation, images deja poussees au registre) et 'pending' (entree de release en attente de promotion, notes deja redigees) sont donc INVISIBLES des clients — aucune cloche ne sonne. Flux : bump-version.py stage -> 'canary' + 'pending' -> sfctl canary (publie les images) -> sfctl validate-canary (Lenovo) -> bump-version.py promote (pending->releases, canary->latest) -> sfctl promote (les cloches sonnent). Un client ne voit donc QUE des versions deja validees sur un vrai serveur.",
-  "latest": "1.0.23",
-  "canary": "1.0.24",
-  "pending": [
+  "latest": "1.0.24",
+  "canary": null,
+  "pending": [],
+  "releases": [
     {
       "version": "1.0.24",
       "date": "2026-08-02",
@@ -11,9 +12,7 @@
         "en": "Large fleets: two artificial ceilings are lifted. The backend ran out of file descriptors at around 500 screens, and nginx's default settings capped the fleet at roughly 1500 - neither had anything to do with the hardware (measured on a 4-core bench, which then held 1999 simultaneous screens without a single refusal). Both fixes now reach EXISTING servers, not just new installations: the update applies the nginx tuning itself, asking for your password if it needs to (if it cannot - an unattended update - it says so and tells you the one command to run). 4K video: transcoding a 4K source with the software encoder could overrun its time budget, be killed, and then be retried again and again, starving the other jobs; the budget now accounts for the resolution and the codec, and an encode that ran out of time is no longer retried. New tool setup-gpu.sh turns hardware video encoding on or off on a server already in service (it never installs a driver), and the operator tools shipped with SignFlow - hardening, backups, GPU, nginx - are now refreshed at every update instead of staying frozen at the version installed on day one. This release also fixes four defects that could break a fresh installation and pins the third-party images (database, object storage, cache) so a routine update no longer moves them without a decision.",
         "fr": "Grands parcs : deux plafonds artificiels sont leves. Le backend manquait de descripteurs de fichiers vers 500 ecrans, et les reglages par defaut de nginx plafonnaient le parc a environ 1500 - aucun des deux n'avait de rapport avec le materiel (mesure sur un banc a 4 coeurs, qui a ensuite tenu 1999 ecrans simultanes sans un seul refus). Les deux correctifs atteignent desormais les serveurs DEJA INSTALLES et pas seulement les installations neuves : la mise a jour applique elle-meme le reglage nginx, en demandant votre mot de passe si necessaire (si elle ne peut pas - mise a jour automatisee - elle le dit et donne la commande unique a lancer). Video 4K : le transcodage d'une source 4K par l'encodeur logiciel pouvait depasser son budget de temps, etre interrompu, puis rejoue indefiniment en affamant les autres travaux ; le budget tient maintenant compte de la definition et du codec, et un encodage arrive au bout de son temps n'est plus rejoue. Nouvel outil setup-gpu.sh pour activer ou desactiver l'encodage video materiel sur un serveur deja en service (il n'installe jamais de pilote), et les outils d'exploitation livres avec SignFlow - durcissement, sauvegardes, GPU, nginx - sont desormais rafraichis a chaque mise a jour au lieu de rester figes a la version posee le premier jour. Cette version corrige aussi quatre defauts qui pouvaient faire echouer une installation neuve, et epingle les images tierces (base de donnees, stockage objet, cache) pour qu'une mise a jour de routine ne les deplace plus sans decision."
       }
-    }
-  ],
-  "releases": [
+    },
     {
       "version": "1.0.23",
       "date": "2026-07-31",
