@@ -132,7 +132,37 @@ refresh_file() {
 # client existant, et setup-gpu.sh — créé le jour même — n'y serait jamais apparu du tout.
 # Même angle mort que la KB non réindexée et que l'auto-rafraîchissement de ce script.
 for f in docker-compose.yml litellm-config.yaml postgres-init.sh setup-backup.sh \
-         signflow-db-backup.sh harden.sh setup-gpu.sh; do refresh_file "$f"; done
+         signflow-db-backup.sh harden.sh setup-gpu.sh tune-nginx.sh; do refresh_file "$f"; done
+
+# ── 2c. Host capacity that lives OUTSIDE our files ───────────────────────────
+# Refreshing our own files is not enough when the setting lives in a file that
+# belongs to the distribution. nginx caps the fleet at ~1500 screens with its
+# default `worker_connections 768` (a proxied WebSocket costs two connections,
+# and every screen holds one permanently). install-ubuntu.sh patches it, so NEW
+# installations are fine — an existing one would have stayed capped for ever.
+# Idempotent, self-verifying (`nginx -t`), and a no-op when nginx is not ours.
+# ⚠️ Editing that file needs root, and update.sh does NOT run as root — everything
+# else here goes through Docker. Measured on a real client install (2026-08-02):
+# the operator account has sudo, but sudo asks for a PASSWORD. So a `sudo -n` only
+# attempt would silently skip the fix on exactly the machines it was written for.
+# Therefore: ask when there IS someone to ask (an operator running the update by
+# hand types their password), and degrade loudly when there is not (sfctl's
+# unattended validation, cron) rather than hang forever on a prompt nobody sees.
+if [[ -f tune-nginx.sh ]]; then
+    if [[ $EUID -eq 0 ]]; then
+        bash tune-nginx.sh || warn "nginx tuning did not complete — run: sudo bash tune-nginx.sh"
+    elif sudo -n true 2>/dev/null; then
+        sudo bash tune-nginx.sh || warn "nginx tuning did not complete — run: sudo bash tune-nginx.sh"
+    elif [[ -t 0 ]] && command -v sudo >/dev/null 2>&1; then
+        step "Checking nginx fleet capacity"
+        warn "Your password may be asked: this one step edits nginx's own configuration."
+        sudo bash tune-nginx.sh || warn "nginx tuning did not complete — run: sudo bash tune-nginx.sh"
+    else
+        warn "SKIPPED the nginx capacity check — no root and no terminal to ask for it."
+        warn "  Your fleet is capped at roughly 1500 screens until you run, ONCE:"
+        warn "      cd $(pwd) && sudo bash tune-nginx.sh"
+    fi
+fi
 
 # ── 3. Images, containers, schema ────────────────────────────────────────────
 step "Downloading images"

@@ -207,12 +207,20 @@ if [[ -f "$SRC_DIR/update.sh" ]]; then
 else
     warn "update.sh not found next to the installer — updates will be manual"
 fi
-# harden.sh — host security baseline (firewall + key-only SSH + fail2ban). Copied so
-# it can be re-run any time; the installer offers to run it at the end.
-if [[ -f "$SRC_DIR/harden.sh" ]]; then
-    cp "$SRC_DIR/harden.sh" "$INSTALL_DIR/harden.sh"
-    chmod +x "$INSTALL_DIR/harden.sh"
-fi
+# The operator-facing tools. They MUST land in the installation directory: both
+# this script and the printed instructions call them from there (`cd /opt/signflow
+# && sudo bash setup-gpu.sh`), and update.sh refreshes them in place. Until
+# 2026-08-02 only harden.sh was copied — so `bash setup-backup.sh` at the end of a
+# fresh install ran against a file that was not there, and a customer who fitted a
+# GPU later had no setup-gpu.sh to run. Optional in the download: warn, never fail.
+for f in harden.sh setup-gpu.sh tune-nginx.sh setup-backup.sh signflow-db-backup.sh; do
+    if [[ -f "$SRC_DIR/$f" ]]; then
+        cp "$SRC_DIR/$f" "$INSTALL_DIR/$f"
+        chmod +x "$INSTALL_DIR/$f"
+    else
+        warn "$f not found next to the installer — it will appear at the first update."
+    fi
+done
 chmod +x "$INSTALL_DIR/postgres-init.sh"
 chown -R "$SERVICE_USER:$SERVICE_USER" "$INSTALL_DIR"
 cd "$INSTALL_DIR"
@@ -662,40 +670,6 @@ step "9/10 — Network access (nginx)"
 
 command -v nginx >/dev/null 2>&1 || { info "Installing nginx..."; apt-get install -y -qq nginx >/dev/null; }
 
-# ── Capacity: every screen holds a WebSocket, permanently ────────────────────
-# A player is not a visitor who comes and goes: it keeps one WebSocket open 24/7.
-# nginx proxies it, and a proxied WebSocket costs TWO connections — one to the
-# client, one to the upstream. Ubuntu ships `worker_connections 768`, so with the
-# usual 4 workers the fleet hits a wall at roughly 1500 screens — measured on the
-# bench, 2026-08-02: 164 refusals at 1600 while the machine was only at 30% CPU.
-# That ceiling fell right in the middle of the 500-1000 and 1000+ tiers our own
-# sizing guide offers, and it had nothing to do with the hardware.
-#
-# ⚠️ This CANNOT be done from conf.d/: `worker_connections` lives in the `events`
-# block, while conf.d is included inside `http`. The main file has to be patched,
-# so we do it idempotently and keep a backup.
-NGINX_CONF=/etc/nginx/nginx.conf
-if [[ -f "$NGINX_CONF" ]]; then
-    cp -n "$NGINX_CONF" "${NGINX_CONF}.signflow.bak" 2>/dev/null || true
-    # Raise the per-worker file-descriptor ceiling. The master runs as root, so it
-    # can lift the soft limit up to the hard one; without this, worker_connections
-    # would be promised and not honoured.
-    if grep -qE '^\s*worker_rlimit_nofile' "$NGINX_CONF"; then
-        sed -i -E 's/^\s*worker_rlimit_nofile.*/worker_rlimit_nofile 65535;/' "$NGINX_CONF"
-    else
-        sed -i -E '/^\s*worker_processes/a worker_rlimit_nofile 65535;' "$NGINX_CONF"
-    fi
-    if grep -qE '^\s*worker_connections' "$NGINX_CONF"; then
-        sed -i -E 's/^(\s*)worker_connections.*/\1worker_connections 8192;/' "$NGINX_CONF"
-    fi
-    if nginx -t >/dev/null 2>&1; then
-        ok "nginx tuned for a large fleet (8192 connections/worker)"
-    else
-        warn "nginx config test failed after tuning — restoring the original."
-        cp "${NGINX_CONF}.signflow.bak" "$NGINX_CONF"
-    fi
-fi
-
 cat > /etc/nginx/sites-available/signflow << NGINXEOF
 upstream signflow_backend  { server 127.0.0.1:${BACKEND_PORT};  keepalive 32; }
 upstream signflow_frontend { server 127.0.0.1:${FRONTEND_PORT}; keepalive 32; }
@@ -762,6 +736,21 @@ NGINXEOF
 
 ln -sf /etc/nginx/sites-available/signflow /etc/nginx/sites-enabled/signflow
 [[ -e /etc/nginx/sites-enabled/default ]] && unlink /etc/nginx/sites-enabled/default
+
+# ── Capacity: every screen holds a WebSocket, permanently ────────────────────
+# The tuning itself lives in tune-nginx.sh, sourced here as a library. ONE
+# definition, used by two paths: this installer, and update.sh on an existing
+# server — a customer installed last month would otherwise have stayed at the
+# distribution's ~1500-screen ceiling for ever. Called AFTER the site is
+# enabled: its presence is what tells the script this nginx is ours to tune.
+if [[ -f "${SRC_DIR}/tune-nginx.sh" ]]; then
+    # shellcheck source=tune-nginx.sh
+    source "${SRC_DIR}/tune-nginx.sh" --lib
+    nginx_tune
+else
+    warn "tune-nginx.sh not found — nginx left at the default fleet capacity (~1500 screens)."
+fi
+
 nginx -t >/dev/null 2>&1 || fail "Invalid nginx configuration"
 systemctl enable nginx >/dev/null 2>&1 || true
 systemctl restart nginx

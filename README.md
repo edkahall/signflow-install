@@ -205,6 +205,34 @@ Three things to back up:
 
 Images need no backup: they can always be pulled again.
 
+### Large fleets — the nginx connection ceiling
+
+A screen is not a visitor who comes and goes: it holds **one WebSocket open
+permanently**, and a proxied WebSocket costs **two** connections — one to the
+screen, one to the backend. Ubuntu ships nginx with `worker_connections 768`,
+which caps the fleet at roughly **1500 screens** whatever the hardware (measured
+on a 4-core bench: refusals started at 1600 while the machine was at 30% CPU;
+tuned, the same machine held 1999 screens without a single refusal).
+
+The installer applies the tuning, so a **new** installation needs nothing. On a
+server installed before this version, the update applies it too — but only if it
+can obtain root. An update run **without a terminal** (automation, cron) cannot
+ask for your password, so it prints a warning and skips it. In that case, run it
+once, by hand:
+
+```bash
+cd /opt/signflow
+sudo bash tune-nginx.sh            # apply (idempotent — safe to re-run)
+sudo bash tune-nginx.sh --status   # what nginx is configured for
+sudo bash tune-nginx.sh --off      # restore the file as it was before us
+```
+
+> This is the one setting that lives in a file belonging to the distribution
+> (`/etc/nginx/nginx.conf`) rather than to SignFlow, which is why it needs root
+> and cannot ship as a drop-in: `worker_connections` sits in the `events` block,
+> and `conf.d/` is included inside `http`. The original file is backed up, the
+> result is checked with `nginx -t`, and any change is rolled back if that fails.
+
 ### Hardware video acceleration
 
 Transcoding is the heaviest thing this server does, and the installer sets up GPU
