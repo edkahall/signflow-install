@@ -9,8 +9,8 @@
       "version": "1.0.25",
       "date": "2026-08-03",
       "notes": {
-        "en": "Media encoding: live progress bar with time remaining. Long encodes are now measured before they start â€” you can run them anyway or encode at a lower resolution instead. New Server page (encoding capacity, measured throughput, queue) for the server operator. Fix: an encode that runs out of time is no longer replayed, which used to burn CPU for a guaranteed failure.",
-        "fr": "Encodage des mÃ©dias : barre de progression avec temps restant. Les encodages longs sont dÃ©sormais estimÃ©s avant de dÃ©marrer â€” vous pouvez les lancer quand mÃªme ou choisir une dÃ©finition infÃ©rieure. Nouvelle page Serveur (capacitÃ© d'encodage, dÃ©bits constatÃ©s, file d'attente) pour l'exploitant du serveur. Correctif : un encodage qui dÃ©passe son temps n'est plus rejouÃ©, ce qui brÃ»lait du processeur pour un Ã©chec garanti."
+        "en": "Media encoding: live progress bar with time remaining. Long encodes are now measured before they start — you can run them anyway or encode at a lower resolution instead. New Server page (encoding capacity, measured throughput, queue) for the server operator. Fix: an encode that runs out of time is no longer replayed, which used to burn CPU for a guaranteed failure.",
+        "fr": "Encodage des médias : barre de progression avec temps restant. Les encodages longs sont désormais estimés avant de démarrer — vous pouvez les lancer quand même ou choisir une définition inférieure. Nouvelle page Serveur (capacité d'encodage, débits constatés, file d'attente) pour l'exploitant du serveur. Correctif : un encodage qui dépasse son temps n'est plus rejoué, ce qui brûlait du processeur pour un échec garanti."
       }
     },
     {
