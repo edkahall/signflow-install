@@ -329,6 +329,14 @@ MINIO_SECRET_KEY=${MINIO_SECRET}
 # Never "localhost": every machine would end up querying itself.
 MINIO_PUBLIC_ENDPOINT=${SERVER_IP}:${MINIO_PORT}
 MINIO_PUBLIC_USE_SSL=false
+# Which interface MinIO listens on. Written EXPLICITLY, even though it matches the
+# compose default, because an exposure nobody declared is an exposure nobody reviews:
+# with media served straight from :9000, this port MUST face the network or players and
+# browsers cannot fetch anything. Put MinIO behind a TLS proxy (README_HTTPS.md), then
+# re-run harden.sh -- it rebinds this to 127.0.0.1 once media no longer needs :9000.
+# ⚠️ Docker publishes ports through its own iptables rules and BYPASSES ufw, so this
+# port stays reachable whatever `ufw status` shows. harden.sh states it explicitly.
+MINIO_BIND=0.0.0.0
 
 # ── Security ──────────────────────────────────────────────────────────────────
 CMS_JWT_SECRET=${JWT_SECRET}

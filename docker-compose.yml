@@ -188,6 +188,14 @@ services:
     restart: unless-stopped
     logging: *default-logging
     environment: *app-env
+    # ⛔ NO `command:` HERE, ON PURPOSE. The image CMD starts uvicorn WITHOUT
+    # `--reload`, and that is the whole point on a production server: with
+    # `--reload`, dropping any file under /app restarts the application and
+    # drops EVERY player WebSocket at once (this happened on 2026-07-27, where a
+    # diagnostic script took the screens down live). `--reload` is also mutually
+    # exclusive with `--workers`, the one real lever against a reconnection burst.
+    # A guard in deploy/registry/publish-images.sh refuses to publish a backend
+    # image whose CMD carries `--reload`.
     # ⚠️ CHAQUE PLAYER TIENT UNE WEBSOCKET OUVERTE EN PERMANENCE — un écran = un
     # descripteur de fichier, 24 h/24. Sans cette limite explicite, le conteneur
     # hérite du défaut Docker (1024) et le parc plafonne à ~500 écrans QUEL QUE SOIT

@@ -116,6 +116,17 @@ if [[ -f "${INSTALL_DIR}/.env" ]]; then
         warn "Media is served directly on MinIO :9000 (no TLS proxy) — that port"
         warn "is reachable from the network and UFW cannot filter it. Put MinIO"
         warn "behind a TLS proxy (see README_HTTPS.md) then re-run this script."
+        # Make the firewall TELL THE TRUTH. Docker publishes ports through its own
+        # iptables rules, so :9000 is reachable whether or not ufw lists it -- and an
+        # operator reading `ufw status` would conclude the opposite. The rule changes
+        # nothing about reachability; it removes the gap between what one believes is
+        # exposed and what actually listens, which is what an audit will flag first.
+        if ! ufw status | grep -q '^9000/tcp'; then
+            ufw allow 9000/tcp comment 'MinIO media - Docker-published, ufw cannot filter it' \
+                >/dev/null 2>&1 \
+                && ok "Port 9000 listed in ufw so the firewall reflects reality" \
+                || warn "Could not add the ufw entry for 9000 (cosmetic only)"
+        fi
     fi
 else
     warn "No ${INSTALL_DIR}/.env — skipping the MinIO check (not a SignFlow host?)"
