@@ -1,9 +1,10 @@
 {
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
   "_canary_comment": "CANARY : la cloche des clients (update_check.py) ne lit QUE 'latest' + 'releases'. 'canary' (version en cours de validation, images deja poussees au registre) et 'pending' (entree de release en attente de promotion, notes deja redigees) sont donc INVISIBLES des clients — aucune cloche ne sonne. Flux : bump-version.py stage -> 'canary' + 'pending' -> sfctl canary (publie les images) -> sfctl validate-canary (Lenovo) -> bump-version.py promote (pending->releases, canary->latest) -> sfctl promote (les cloches sonnent). Un client ne voit donc QUE des versions deja validees sur un vrai serveur.",
-  "latest": "1.0.28",
-  "canary": "1.0.29",
-  "pending": [
+  "latest": "1.0.29",
+  "canary": null,
+  "pending": [],
+  "releases": [
     {
       "version": "1.0.29",
       "date": "2026-08-07",
@@ -11,9 +12,7 @@
         "en": "Proof of Play: content hidden behind a full-screen overlay is no longer counted as airtime. On a multi-zone screen, the other zones keep running underneath a full-screen campaign spot or a VOD takeover, and were attesting playback nobody could see - inflating the SOV denominator and raising false under-delivery alerts. Those proofs are now marked, kept in the Merkle chain and in forensic views, but excluded from every airtime total. Demo accounts: two read-only checks were wrongly refused.",
         "fr": "Proof of Play : ce qui est recouvert par un affichage plein écran ne compte plus comme du temps d'antenne. Sur un écran multi-zones, les autres zones continuent de tourner sous un spot de campagne plein écran ou une prise d'antenne VOD, et attestaient une diffusion que personne ne voyait — gonflant le dénominateur du SOV et déclenchant de fausses alertes de sous-diffusion. Ces preuves sont désormais marquées, conservées dans la chaîne Merkle et dans les vues forensiques, mais exclues de tous les totaux d'antenne. Comptes démo : deux contrôles en lecture seule étaient refusés à tort."
       }
-    }
-  ],
-  "releases": [
+    },
     {
       "version": "1.0.28",
       "date": "2026-08-06",
