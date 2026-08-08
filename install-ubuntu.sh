@@ -27,7 +27,7 @@ set -euo pipefail
 SRC_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 INSTALL_DIR="/opt/signflow"
 REGISTRY="${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}"
-VERSION="${SIGNFLOW_VERSION:-1.0.30}"
+VERSION="${SIGNFLOW_VERSION:-1.0.31}"
 
 # Owner of the configuration files: whoever ran `sudo`, so they can edit them
 # without root. Falls back to root when that account does not exist.
