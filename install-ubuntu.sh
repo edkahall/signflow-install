@@ -388,9 +388,12 @@ if [[ -z "${SIGNFLOW_REGISTRY_USER:-}" ]]; then
     # Say so plainly instead of dying on an unanswerable prompt.
     (( NONINTERACTIVE )) && fail "SIGNFLOW_REGISTRY_USER and SIGNFLOW_REGISTRY_PASSWORD are required when there is no terminal. They come with your licence."
     echo ""
-    info "Image registry credentials (supplied with your SignFlow licence)"
-    read -rp "    Username: " SIGNFLOW_REGISTRY_USER
-    read -rsp "    Password: " SIGNFLOW_REGISTRY_PASSWORD
+    # The prompt names the field the customer is actually looking at: their handoff sheet
+    # says "Licence ID", and the same value is the `licence_id` of their licence.json.
+    # Asking for a "Username" sent them hunting for something that does not exist.
+    info "Image registry credentials — see the handoff sheet supplied with your licence"
+    read -rp "    Licence ID (\"licence_id\" in your licence.json): " SIGNFLOW_REGISTRY_USER
+    read -rsp "    Registry password: " SIGNFLOW_REGISTRY_PASSWORD
     echo ""
 fi
 
@@ -403,10 +406,14 @@ mkdir -p config
 chown "$SERVICE_USER:$SERVICE_USER" config
 if [[ -z "${LICENCE_PUBLIC_KEY:-}" ]]; then
     echo ""
-    info "Licence public key (supplied with your licence — press Enter to skip)"
+    info "Publisher public key — on your handoff sheet, under \"Clé publique de l'éditeur\""
+    info "(paste it exactly as printed, literal \\n included — press Enter to skip)"
     ask LICENCE_PUBLIC_KEY "    Public key: "
 fi
-if [[ -n "${LICENCE_PUBLIC_KEY:-}" && ! -f config/licence.json ]]; then
+# ⚠️ Asked INDEPENDENTLY of the public key. It used to be nested under it, so a customer who
+# could not answer the key question was never even offered to install their licence: the step
+# vanished silently and the server came up unlicensed. Found on a real install, 2026-08-08.
+if [[ ! -f config/licence.json ]]; then
     echo ""
     info "Path to your licence file (press Enter to drop it in later)"
     # LICENCE_FILE may also be passed as an environment variable (unattended).
@@ -422,6 +429,12 @@ if [[ -n "${LICENCE_PUBLIC_KEY:-}" && ! -f config/licence.json ]]; then
             warn "File not found: $LICENCE_FILE — continuing unlicensed."
         fi
     fi
+fi
+# A licence without the key that verifies it is inert — and nothing else would say so.
+if [[ -f config/licence.json && -z "${LICENCE_PUBLIC_KEY:-}" ]]; then
+    warn "Licence installed but NO public key: the server cannot verify it and will behave"
+    warn "as unlicensed. Re-run with LICENCE_PUBLIC_KEY, or add SIGNFLOW_LICENCE_PUBLIC_KEY"
+    warn "to /opt/signflow/.env and restart. The key is on your handoff sheet."
 fi
 
 # The .env is written at step 3, BEFORE the question above is asked — so a key

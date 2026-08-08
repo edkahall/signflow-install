@@ -22,7 +22,18 @@ a lot of video, or 4K content.
 
 Docker is installed automatically if missing.
 
-You will need **image registry credentials**, supplied with your licence.
+You will need the **handoff sheet** supplied with your licence. It carries three
+things the installer asks for, and none of them can be guessed:
+
+| On the sheet | The installer asks for it as |
+|---|---|
+| **Licence ID** (also the `licence_id` field of your `licence.json`) | the registry login |
+| **Mot de passe** | the registry password |
+| **Clé publique de l'éditeur** | the publisher public key — paste it exactly as printed, literal `\n` included |
+
+> ⚠️ Without the public key the server cannot verify your licence: it will start
+> and run, but it behaves as **unlicensed**, and nothing in the interface says the
+> licence you installed is being ignored.
 
 ---
 
@@ -440,10 +451,39 @@ cd /opt/signflow && docker compose up -d
 Certificates are issued within a minute. Check with
 `docker logs signflow_caddy | grep -i certificate`.
 
-### 6. Verify — do not skip this
+> If that command shows `rejectedIdentifier ... forbidden by policy`, the example
+> domain is still in your Caddyfile — replace **both** occurrences.
+
+### 6. Close MinIO's plain port — do not skip this either
+
+Until now MinIO was published on port **9000 in plain HTTP**. Docker publishes it
+through its own iptables rules, which **bypass ufw**: the firewall reports the port
+as closed while the whole internet can reach it. Now that Caddy serves the media
+over TLS on 9443, bind it back to the loopback:
+
+```bash
+# /opt/signflow/.env
+MINIO_BIND=127.0.0.1
+```
+
+```bash
+cd /opt/signflow && docker compose up -d --force-recreate minio
+```
+
+Caddy runs on the host network, so it still reaches MinIO on `127.0.0.1:9000`.
+
+### 7. Verify — do not skip this
 
 Log in over HTTPS **and open a media item**. A padlock on the login page proves
 nothing about the media path, which is exactly where this setup breaks.
+
+Then check the exposure from **outside** the machine — both halves matter, because
+closing the port without checking the media reproduces the same trap in reverse:
+
+```bash
+curl -sI https://<your-domain>:9443/minio/health/live   # expected: 200
+curl -sI --max-time 5 http://<your-domain>:9000/        # expected: connection refused
+```
 
 ### If port 443 is already taken
 
