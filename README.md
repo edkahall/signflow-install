@@ -233,6 +233,36 @@ sudo bash tune-nginx.sh --off      # restore the file as it was before us
 > and `conf.d/` is included inside `http`. The original file is backed up, the
 > result is checked with `nginx -t`, and any change is rolled back if that fails.
 
+### Reconnection bursts — how many backend processes
+
+When a site gets its power back, or after a server restart, every screen
+reconnects at once. Until now the backend answered them **one at a time**: a
+single Python process pins **one core** and cannot use the others. Measured on a
+16-core server (2026-08-08): during a 400-screen burst that process sat at 101%
+of one core while the machine as a whole was at **4%**. The server was not
+short of power — it was using a sixteenth of it.
+
+The backend now runs **one process per core, minus one, capped at 8**, worked out
+at startup. Nothing to configure. On the two benches this divided the
+reconnection delay by **2.5 to 3.8** (400 screens: 4.9 s → 1.9 s on a 4-core VM,
+3.5 s → 0.9 s on a 16-core server), with no error.
+
+To pin the value — a machine shared with other services, for instance — set it in
+`.env` and recreate the container:
+
+```bash
+echo 'WEB_CONCURRENCY=2' >> /opt/signflow/.env   # 1 = previous behaviour
+docker compose up -d backend                    # `restart` is NOT enough
+```
+
+> **The database pools are not multiplied by that number.** The connection budget
+> (`CMS_DB_CONNECTION_BUDGET`, 60 by default) is *global* and is shared out
+> between the processes, so adding processes never adds connections — PostgreSQL
+> counts connections, not processes, and a database that refuses a connection does
+> not degrade, it breaks. With a single process the pools are exactly what they
+> have always been. If you raise `max_connections` on PostgreSQL, raise the budget
+> here to match, keeping a reserve for the Celery services and for maintenance.
+
 ### Hardware video acceleration
 
 Transcoding is the heaviest thing this server does, and the installer sets up GPU

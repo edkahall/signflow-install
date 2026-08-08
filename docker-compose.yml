@@ -77,6 +77,12 @@ x-app-env: &app-env
   CMS_PLAYER_TOKEN_REFRESH_DAYS: ${CMS_PLAYER_TOKEN_REFRESH_DAYS:-20}
   CMS_PLAYER_TOKEN_GRACE_DAYS: ${CMS_PLAYER_TOKEN_GRACE_DAYS:-14}
   EVENT_BUS_BACKEND: ${EVENT_BUS_BACKEND:-redis_streams}
+  # PostgreSQL connections the backend processes may consume IN TOTAL. Deliberately
+  # below `max_connections` (100): the four Celery services, migrations and manual
+  # maintenance draw on the same reserve, and a database that refuses a connection
+  # does not degrade -- it breaks. The per-process pools are DERIVED from this budget
+  # and from the number of processes, so adding processes never adds connections.
+  CMS_DB_CONNECTION_BUDGET: ${CMS_DB_CONNECTION_BUDGET:-60}
   # Kahall ERP integration — OPTIONAL: empty means SignFlow runs standalone
   ERP_API_URL: ${ERP_API_URL:-}
   ERP_SSO_ENABLED: ${ERP_SSO_ENABLED:-false}
@@ -187,7 +193,15 @@ services:
     image: ${SIGNFLOW_REGISTRY:-registry.dernoult.net:8443}/signflow-backend:${SIGNFLOW_VERSION:-latest}
     restart: unless-stopped
     logging: *default-logging
-    environment: *app-env
+    environment:
+      <<: *app-env
+      # Number of uvicorn processes. "auto" = one per core minus one, capped at 8, worked
+      # out by the image entrypoint. A SINGLE process serialises every reconnection: it
+      # pins ONE core at 101 % while the rest of the machine idles -- measured at 4 % on a
+      # 16-core server (2026-08-08, see deploy/loadtest/). Spreading over the cores divides
+      # the reconnection delay by 2.5 to 3.8. Set a number here to pin it; 1 restores the
+      # historical single-process behaviour.
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-auto}
     # ⛔ NO `command:` HERE, ON PURPOSE. The image CMD starts uvicorn WITHOUT
     # `--reload`, and that is the whole point on a production server: with
     # `--reload`, dropping any file under /app restarts the application and
