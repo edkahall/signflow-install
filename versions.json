@@ -10,7 +10,7 @@
       "date": "2026-08-10",
       "notes": {
         "en": "Fleet updates: a screen whose platform has no published version now reads 'Unknown' and is counted separately, instead of being reported 'up to date'. A server with an empty catalogue no longer claims everything is fine. Layout: the version list and the dashboard screen table no longer collapse on a Full HD display. The help bubble no longer swallows clicks meant for the page and can be collapsed.",
-        "fr": "Mises à jour du parc : un écran dont la plateforme n'a aucune version publiée s'affiche désormais « Inconnu » et se compte à part, au lieu d'être annoncé « à jour ». Un serveur au catalogue vide n'affirme plus que tout va bien. Mise en page : la liste des versions et la table des écrans du tableau de bord ne s'écrasent plus sur un écran Full HD. La bulle d'aide ne capte plus les clics destinés a la page et peut se ranger."
+        "fr": "Mises à jour du parc : un écran dont la plateforme n'a aucune version publiée s'affiche désormais « Inconnu » et se compte à part, au lieu d'être annoncé « à jour ». Un serveur au catalogue vide n'affirme plus que tout va bien. Mise en page : la liste des versions et la table des écrans du tableau de bord ne s'écrasent plus sur un écran Full HD. La bulle d'aide ne capte plus les clics destinés à la page et peut se ranger."
       }
     },
     {
