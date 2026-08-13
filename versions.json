@@ -2,8 +2,17 @@
   "_comment": "Manifeste de versions SignFlow. SOURCE DE VERITE ici ; publiee telle quelle sur le depot PUBLIC signflow-install (raw GitHub), ou le backend de chaque serveur client la sonde pour la cloche 'MAJ disponible'. Ne lister QUE des versions recommandees et installables (images publiees dans le registre) : la cloche pointe toujours vers une cible saine. 'latest' = la version a installer ; 'releases' = plus recente d'abord, notes localisees, 'security' = true si la MAJ corrige une faille.",
   "_canary_comment": "CANARY : la cloche des clients (update_check.py) ne lit QUE 'latest' + 'releases'. 'canary' (version en cours de validation, images deja poussees au registre) et 'pending' (entree de release en attente de promotion, notes deja redigees) sont donc INVISIBLES des clients — aucune cloche ne sonne. Flux : bump-version.py stage -> 'canary' + 'pending' -> sfctl canary (publie les images) -> sfctl validate-canary (Lenovo) -> bump-version.py promote (pending->releases, canary->latest) -> sfctl promote (les cloches sonnent). Un client ne voit donc QUE des versions deja validees sur un vrai serveur.",
   "latest": "1.0.38",
-  "canary": null,
-  "pending": [],
+  "canary": "1.0.39",
+  "pending": [
+    {
+      "version": "1.0.39",
+      "date": "2026-08-13",
+      "notes": {
+        "en": "Previewing a playlist now shows what a screen will actually display: when the playlist uses a multi-zone template, the preview composes every zone at once, at the template's aspect ratio, with each zone advancing at its own pace - instead of playing the contents one after another in a flat list. A full-screen button enlarges the preview and brings it back. The play button inside the playlist editor now behaves like the one in the playlist list. Feeds, web pages and HDMI inputs appear by name at their real place and size: they are produced on the screen, at playback time. New SignFlow logo.",
+        "fr": "L'aperçu d'une playlist montre désormais ce qu'un écran diffusera réellement : lorsque la playlist s'appuie sur un template multi-zones, l'aperçu compose toutes les zones à la fois, au ratio du template, chaque zone avançant à son propre rythme - au lieu d'enchaîner les contenus à plat. Un bouton plein écran agrandit l'aperçu et permet de le réduire. Le bouton de lecture de l'éditeur de playlist se comporte désormais comme celui de la liste. Les flux, pages web et entrées HDMI apparaissent avec leur nom, à leur vraie place et à leur vraie taille : ils sont produits sur l'écran, au moment de la diffusion. Nouveau logo SignFlow."
+      }
+    }
+  ],
   "releases": [
     {
       "version": "1.0.38",
